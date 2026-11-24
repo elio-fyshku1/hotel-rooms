@@ -27,6 +27,7 @@ interface LateCheckoutDialogProps {
 
 /** Two choices: check out without extra, or with the amount in the field. */
 export default function LateCheckoutDialog({ checkout, currency, busy, onConfirm, onCancel }: LateCheckoutDialogProps) {
+  // The field holds text while typing; it's turned into a number when used
   const [extra, setExtra] = useState(String(checkout.suggestedExtra));
   const extraAmount = Number(extra) || 0;
 
@@ -37,10 +38,12 @@ export default function LateCheckoutDialog({ checkout, currency, busy, onConfirm
         <p className="muted">Koha mbaroi para {formatDuration(checkout.overtimeMinutes)}.</p>
 
         <div className="stack">
+          {/* Usual case: the guest left earlier and the card was found in the room */}
           <button className="btn green big" disabled={busy} onClick={() => onConfirm(0)}>
             Klienti ishte larguar - pa pagesë shtesë
           </button>
 
+          {/* The guest stayed longer: amount pre-filled with the suggested overtime charge */}
           <div className="panel">
             <label htmlFor="extra-amount">Klienti qëndroi më gjatë dhe paguan shtesë ({currency})</label>
             <div className="row nowrap">

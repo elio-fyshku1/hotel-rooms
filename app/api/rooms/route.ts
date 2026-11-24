@@ -9,8 +9,6 @@ import { requireApiUser } from "@/lib/auth";
 import { getSettings, listRooms } from "@/lib/stays";
 import { withErrorHandling } from "@/lib/errors";
 
-export const dynamic = "force-dynamic";
-
 // Rooms with their open stays, the settings and the server time
 export const GET = withErrorHandling(async () => {
   const user = await requireApiUser();

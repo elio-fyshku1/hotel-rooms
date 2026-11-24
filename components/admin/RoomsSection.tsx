@@ -35,6 +35,7 @@ export default function RoomsSection({ rooms, runChange }: RoomsSectionProps) {
     <section className="card">
       <h3>Dhomat</h3>
 
+      {/* Add rooms: a list and/or ranges, optionally with a floor */}
       <div className="row align-end" style={{ marginBottom: 12 }}>
         <div className="grow" style={{ minWidth: 200 }}>
           <label htmlFor="room-numbers">Numrat e dhomave (p.sh. 101-110, 201, 202)</label>
@@ -49,6 +50,7 @@ export default function RoomsSection({ rooms, runChange }: RoomsSectionProps) {
         </button>
       </div>
 
+      {/* One button per room; red = disabled */}
       <p className="muted small">Kliko një dhomë për ta çaktivizuar (p.sh. në riparim) ose aktivizuar.</p>
       <div className="row">
         {rooms.map((room) => (

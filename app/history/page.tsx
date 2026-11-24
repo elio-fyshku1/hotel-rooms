@@ -8,8 +8,6 @@ import { getHistory, HistoryRow } from "@/lib/history";
 import { formatDateTime, formatDuration, formatMoney, stayTypeLabel } from "@/lib/format";
 import NavBar from "@/components/NavBar";
 
-export const dynamic = "force-dynamic";
-
 const STATUS_LABELS: Record<HistoryRow["status"], string> = {
   open: "brenda",
   closed: "mbyllur",

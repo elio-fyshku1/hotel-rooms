@@ -10,8 +10,6 @@ import NavBar from "@/components/NavBar";
 import AdminPanel from "@/components/admin/AdminPanel";
 import type { AdminCard, AdminRoom, AdminUser } from "@/components/admin/AdminPanel";
 
-export const dynamic = "force-dynamic";
-
 // Sorts room numbers as numbers (9 before 10), then as text
 const ROOM_ORDER = "nullif(regexp_replace(r.number, '\\D', '', 'g'), '')::bigint nulls last, r.number";
 
@@ -28,7 +26,7 @@ export default async function AdminPage() {
   );
 
   const cards = await query<AdminCard>(
-    `select k.id, k.code, k.label, k.active, k.room_id, r.number as room
+    `select k.id, k.code, k.label, k.active, r.number as room
        from key_cards k
        join rooms r on r.id = k.room_id
       order by ${ROOM_ORDER}, k.id`
