@@ -84,24 +84,37 @@ npm start                     # http://localhost:3000, login admin / admin123
 
 A lost card: click "Çaktivizo" on it, then add a new card for that room and print its label.
 
-### Docker
+### Docker on your PC
 
 ```bash
-# change the passwords and SESSION_SECRET in docker-compose.yml first
 docker compose up -d --build
-docker compose exec app node scripts/setup-db.mjs
+docker compose exec app node scripts/setup-db.mjs --demo
 ```
 
-### HTTPS
-Put Caddy or Nginx in front, then set `COOKIE_SECURE=true`. Example `Caddyfile`:
+Then open http://localhost:3000 (admin / admin123). Without a `.env` file the
+compose file uses test passwords, which is fine on your own PC only.
 
-```
-rooms.example.al {
-  reverse_proxy localhost:3000
-}
-```
+### Server (Amazon Lightsail)
 
-HTTPS also lets the browser keep the screen on while the board is open (Screen Wake Lock).
+1. Create a Lightsail instance: **Linux/Unix → OS Only → Ubuntu 24.04**, 2 GB plan.
+2. In the instance's **Networking** tab: attach a **static IP**, and add a firewall rule for **HTTPS (443)**.
+3. Click **Connect using SSH** and run:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/elio-fyshku1/hotel-rooms/main/scripts/install-server.sh -o install.sh
+   sudo bash install.sh
+   ```
+4. The script prints the address and the admin password (random, write it down).
+
+`scripts/install-server.sh` installs Docker and Caddy, downloads the code to
+`/opt/hotel-rooms`, writes `/opt/hotel-rooms/.env` with random passwords, starts
+everything and creates the tables.
+
+- **Update** after new commits on GitHub: `sudo bash /opt/hotel-rooms/scripts/install-server.sh` (data is kept).
+- **HTTPS**: point a domain (A record) to the static IP, then run
+  `sudo DOMAIN=dhomat.example.al bash /opt/hotel-rooms/scripts/install-server.sh`.
+  Caddy gets the certificate by itself. HTTPS also lets the browser keep the
+  reception screen on (Screen Wake Lock).
+- **Backups**: enable automatic snapshots for the instance in the Lightsail console.
 
 ---
 
@@ -125,6 +138,7 @@ HTTPS also lets the browser keep the screen on while the board is open (Screen W
 ```
 db/schema.sql                 tables, indexes and the SQL functions for the time rules
 scripts/setup-db.mjs          applies the schema, creates the admin user, optional demo data
+scripts/install-server.sh     installs / updates the app on an Ubuntu server
 
 lib/
   db.ts                       connection pool, query() and transaction()

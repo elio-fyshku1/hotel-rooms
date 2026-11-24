@@ -1,26 +1,35 @@
+# The app and its PostgreSQL database.
+#
+# ${NAME:-default} values come from a .env file next to this file. On the
+# server, scripts/install-server.sh creates that file with random passwords.
+# Without a .env file the defaults are used, which is fine for testing on a PC.
+
 services:
+  # PostgreSQL. The data lives in the "pgdata" volume, so it survives restarts and rebuilds.
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: hotel
-      POSTGRES_PASSWORD: change-this-db-password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-this-db-password}
       POSTGRES_DB: hotel
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  # The Next.js app, built from the Dockerfile in this folder
   app:
     build: .
     restart: unless-stopped
     depends_on: [db]
     ports:
-      - "3000:3000"
+      # On the server APP_BIND is 127.0.0.1, so the app is only reachable through Caddy
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://hotel:change-this-db-password@db:5432/hotel
-      SESSION_SECRET: change-me-to-a-long-random-string
-      COOKIE_SECURE: "false"   # set "true" once you put HTTPS in front (Caddy/Nginx)
+      DATABASE_URL: postgresql://hotel:${DB_PASSWORD:-change-this-db-password}@db:5432/hotel
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-string}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: admin123
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
       TZ: Europe/Tirane
 
 volumes:
