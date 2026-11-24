@@ -59,6 +59,7 @@ h2 { display: flex; align-items: center; gap: 10px; }
 .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 .text-red { color: #fca5a5; }
 .text-right { text-align: right; }
+.no-margin { margin: 0; }
 .faded { opacity: 0.5; }
 
 
@@ -141,10 +142,12 @@ th { color: var(--muted); font-weight: 600; }
 
 /* ---------- Room board ---------- */
 
+.stats { display: flex; flex-wrap: wrap; gap: 8px; }
 .stat { padding: 6px 12px; font-size: 14px; font-weight: 700; background: var(--panel-2); border-radius: 999px; }
 .stat.free { color: #86efac; }
 .stat.occupied { color: #fca5a5; }
 .stat.overdue { background: var(--red); color: white; }
+.stat.cleaning { color: #fcd34d; }
 
 .clock { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
 
@@ -152,9 +155,10 @@ th { color: var(--muted); font-weight: 600; }
 .scan-bar input { padding: 14px; font-size: 18px; letter-spacing: 1px; }
 .scan-ready { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
 
-.rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+.floor-title { margin: 18px 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.rooms { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 
-/* Occupied rooms are <button>s (they open the room dialog), free rooms are plain <div>s */
+/* A room tile is a <button> so it works with keyboard and touch */
 .room {
   position: relative;
   display: flex;
@@ -173,16 +177,18 @@ th { color: var(--muted); font-weight: 600; }
   transition: transform 0.1s;
 }
 
-button.room:active { transform: scale(0.97); }
+.room:active { transform: scale(0.97); }
 .room-number { font-size: 30px; font-weight: 800; line-height: 1; }
 .room-status { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; }
 .room-type { position: absolute; top: 10px; right: 10px; }
 .room-times { font-size: 12px; opacity: 0.85; }
 .room-timer { margin-top: auto; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* Colours per status (see getRoomStatus in components/dashboard/RoomTile.tsx) */
-.room.free { background: var(--green); cursor: default; }
+/* Colours per status (see components/dashboard/roomStatus.ts) */
+.room.free { background: var(--green); }
 .room.occupied { background: var(--red); }
+.room.ending { background: var(--red); border-color: var(--amber); }
+.room.cleaning { background: var(--amber); color: #1a1205; }
 .room.overdue {
   background: var(--red);
   border-color: white;

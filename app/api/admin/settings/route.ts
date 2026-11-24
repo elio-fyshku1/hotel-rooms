@@ -1,6 +1,6 @@
 /**
  * POST /api/admin/settings
- * Saves the hotel name, currency, prices and time rules. Admins only.
+ * Saves prices, time rules and the hotel name/currency/timezone. Admins only.
  */
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
@@ -32,19 +32,27 @@ export const POST = withErrorHandling(async (request: Request) => {
     }
   }
 
+  // Validate the timezone name by letting the runtime try to use it
+  try {
+    Intl.DateTimeFormat("en", { timeZone: String(body.timezone) });
+  } catch {
+    throw new UserError("Zonë kohore e panjohur (shembull: Europe/Tirane).");
+  }
+
   const shortMinutes = Math.round(nonNegative(body.short_minutes, "Kohëzgjatja"));
   if (shortMinutes < 1) throw new UserError("Kohëzgjatja duhet të jetë të paktën 1 minutë.");
 
   await query(
     `update settings
-        set hotel_name = $1, currency = $2,
-            short_price = $3, short_minutes = $4, night_price = $5,
-            night_start = $6, night_end = $7, night_checkout = $8,
-            extra_hour_price = $9, grace_minutes = $10
+        set hotel_name = $1, currency = $2, timezone = $3,
+            short_price = $4, short_minutes = $5, night_price = $6,
+            night_start = $7, night_end = $8, night_checkout = $9,
+            extra_hour_price = $10, grace_minutes = $11, require_cleaning = $12
       where id = 1`,
     [
       String(body.hotel_name || "Hotel").trim(),
       String(body.currency || "EUR").trim().toUpperCase(),
+      String(body.timezone),
       nonNegative(body.short_price, "Çmimi 2 orë"),
       shortMinutes,
       nonNegative(body.night_price, "Çmimi natë"),
@@ -53,6 +61,7 @@ export const POST = withErrorHandling(async (request: Request) => {
       body.night_checkout,
       nonNegative(body.extra_hour_price, "Shtesa për orë"),
       Math.round(nonNegative(body.grace_minutes, "Minuta tolerancë")),
+      Boolean(body.require_cleaning),
     ]
   );
 

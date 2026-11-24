@@ -7,6 +7,8 @@ import { requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import LabelSheet from "@/components/admin/LabelSheet";
 
+export const dynamic = "force-dynamic";
+
 interface LabelsPageProps {
   searchParams: Promise<{ card?: string }>;
 }
@@ -16,8 +18,8 @@ export default async function LabelsPage({ searchParams }: LabelsPageProps) {
   await requireUser(true);
   const { card } = await searchParams;
 
-  const labels = await query<{ id: number; code: string; room: string }>(
-    `select k.id, k.code, r.number as room
+  const labels = await query<{ id: number; code: string; room: string; label: string }>(
+    `select k.id, k.code, r.number as room, k.label
        from key_cards k
        join rooms r on r.id = k.room_id
       where k.active and r.active

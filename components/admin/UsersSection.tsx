@@ -45,7 +45,6 @@ export default function UsersSection({ users, currentUserId, runChange }: UsersS
     <section className="card">
       <h3>Përdoruesit</h3>
 
-      {/* New user form */}
       <div className="row align-end" style={{ marginBottom: 12 }}>
         <div className="grow" style={{ minWidth: 140 }}>
           <label htmlFor="new-username">Përdoruesi</label>
@@ -81,7 +80,6 @@ export default function UsersSection({ users, currentUserId, runChange }: UsersS
         </button>
       </div>
 
-      {/* User list; you can't disable your own account */}
       <div className="table-wrap">
         <table>
           <thead>

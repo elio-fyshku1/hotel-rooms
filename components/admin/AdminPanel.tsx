@@ -15,6 +15,7 @@ import UsersSection from "./UsersSection";
 export interface AdminRoom {
   id: number;
   number: string;
+  floor: number | null;
   active: boolean;
   card_count: number;
 }
@@ -24,6 +25,7 @@ export interface AdminCard {
   code: string;
   label: string;
   active: boolean;
+  room_id: number;
   room: string;
 }
 
@@ -69,14 +71,12 @@ export default function AdminPanel({ currentUserId, settings, rooms, cards, user
 
   return (
     <div className="container admin">
-      {/* Result of the last change (green = done, red = error); tap to hide */}
       {message && (
         <div className={`card message ${message.ok ? "ok" : "fail"}`} onClick={() => setMessage(null)}>
           {message.text}
         </div>
       )}
 
-      {/* Cards first: printing labels is the most common admin task */}
       <CardsSection rooms={rooms} cards={cards} runChange={runChange} />
       <RoomsSection rooms={rooms} runChange={runChange} />
       <SettingsSection settings={settings} runChange={runChange} />

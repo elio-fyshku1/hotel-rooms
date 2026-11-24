@@ -14,6 +14,7 @@ interface Label {
   id: number;
   code: string;
   room: string;
+  label: string;
 }
 
 /** Draws one barcode into an <svg> element. */
