@@ -32,6 +32,7 @@ function parseRoomNumbers(input: string): string[] {
   return numbers;
 }
 
+// Add rooms from a list/range; an existing room number is just re-enabled
 export const POST = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;
@@ -53,6 +54,7 @@ export const POST = withErrorHandling(async (request: Request) => {
   return NextResponse.json({ ok: true, added: roomNumbers.length });
 });
 
+// Enable or disable a room
 export const PATCH = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;

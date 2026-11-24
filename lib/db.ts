@@ -35,8 +35,7 @@ export type Queryable = Pool | PoolClient;
  * Runs one SQL statement and returns its rows.
  * Pass a transaction client as the last argument to run it inside that transaction.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function query<T = any>(sql: string, params: unknown[] = [], db: Queryable = pool): Promise<T[]> {
+export async function query<T = Record<string, any>>(sql: string, params: unknown[] = [], db: Queryable = pool): Promise<T[]> {
   const result = await db.query(sql, params);
   return result.rows as T[];
 }

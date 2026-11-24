@@ -45,11 +45,9 @@ if (existingAdmin.rowCount === 0) {
   console.log(`Admin user "${adminUsername}" already exists, left unchanged.`);
 }
 
-/** 8 random digits, same format as lib/cardCodes.ts. */
+/** 8 random digits, same format as the codes made in Administrimi. */
 function randomCardCode() {
-  let code = String(randomInt(1, 10));
-  for (let i = 1; i < 8; i++) code += String(randomInt(0, 10));
-  return code;
+  return String(randomInt(10_000_000, 100_000_000));
 }
 
 // 3. Optional demo data

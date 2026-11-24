@@ -8,10 +8,30 @@
  *   PATCH { id, active }            enable / disable a card (e.g. lost card)
  */
 import { NextResponse } from "next/server";
+import { randomInt } from "node:crypto";
 import { requireApiUser } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { generateUniqueCardCode } from "@/lib/cardCodes";
 import { withErrorHandling, UserError } from "@/lib/errors";
+
+/**
+ * Generates a new card code: 8 random digits, not used by any other card.
+ *
+ * Digits only, on purpose: a USB barcode scanner "types" the code like a US
+ * keyboard, and on a PC set to another layout (the Albanian layout swaps Y
+ * and Z and moves the symbols) letters and symbols can come out wrong.
+ * Digits are in the same place on every layout. Random rather than based on
+ * the room number, so a lost card can be replaced with a new code without
+ * touching the other cards of that room.
+ */
+async function generateCardCode(): Promise<string> {
+  // 90 million possible codes, so a collision is very unlikely; retry anyway
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = String(randomInt(10_000_000, 100_000_000));
+    const existing = await query("select 1 from key_cards where code = $1", [code]);
+    if (existing.length === 0) return code;
+  }
+  throw new Error("Could not generate a unique card code");
+}
 
 /** Inserts a card for a room, naming it "Karta 1", "Karta 2", ... within that room. */
 async function addCard(roomId: number, code: string): Promise<{ code: string; label: string }> {
@@ -24,6 +44,7 @@ async function addCard(roomId: number, code: string): Promise<{ code: string; la
   return { code, label };
 }
 
+// Add one card (generated or scanned code) or one card for every room without a card
 export const POST = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;
@@ -38,7 +59,7 @@ export const POST = withErrorHandling(async (request: Request) => {
           and not exists (select 1 from key_cards k where k.room_id = r.id and k.active)`
     );
     for (const room of rooms) {
-      await addCard(room.id, await generateUniqueCardCode());
+      await addCard(room.id, await generateCardCode());
     }
     return NextResponse.json({ ok: true, added: rooms.length });
   }
@@ -49,7 +70,7 @@ export const POST = withErrorHandling(async (request: Request) => {
 
   const scannedCode = String(body.code ?? "").trim().toUpperCase();
   if (!scannedCode) {
-    return NextResponse.json({ ok: true, ...(await addCard(roomId, await generateUniqueCardCode())) });
+    return NextResponse.json({ ok: true, ...(await addCard(roomId, await generateCardCode())) });
   }
 
   if (scannedCode.length < 4) throw new UserError("Kodi i kartës është shumë i shkurtër.");
@@ -66,6 +87,7 @@ export const POST = withErrorHandling(async (request: Request) => {
   return NextResponse.json({ ok: true, ...(await addCard(roomId, scannedCode)) });
 });
 
+// Enable or disable a card
 export const PATCH = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;

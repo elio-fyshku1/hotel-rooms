@@ -36,6 +36,7 @@ function Barcode({ value }: { value: string }) {
   return <svg ref={svgRef} />;
 }
 
+/** Toolbar with a Print button, then one label per card. */
 export default function LabelSheet({ labels }: { labels: Label[] }) {
   return (
     <div className="container">

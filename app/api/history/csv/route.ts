@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
 import { getHistory } from "@/lib/history";
-import { getSettings } from "@/lib/settings";
+import { getSettings } from "@/lib/stays";
 import { withErrorHandling } from "@/lib/errors";
 
 /** Date -> "2026-11-22 14:05:00" in the hotel's timezone ("" when empty). */
@@ -20,6 +20,7 @@ function csvField(value: unknown): string {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+// Build the CSV for the requested period and send it as a download
 export const GET = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;

@@ -99,8 +99,7 @@ create table if not exists stays (
   extra_charge   numeric(10,2) not null default 0,
   currency       text not null,
   checked_in_by  int references users(id),
-  checked_out_by int references users(id),
-  note           text not null default ''
+  checked_out_by int references users(id)
 );
 
 -- A room can never have two open stays at the same time, even if two

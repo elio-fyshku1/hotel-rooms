@@ -9,6 +9,7 @@ import { requireApiUser } from "@/lib/auth";
 import { scanCard } from "@/lib/stays";
 import { withErrorHandling, UserError } from "@/lib/errors";
 
+// Check in or check out the room of the scanned card
 export const POST = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser();
   if (user instanceof NextResponse) return user;

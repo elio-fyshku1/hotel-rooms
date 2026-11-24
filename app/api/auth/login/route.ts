@@ -14,6 +14,7 @@ import { withErrorHandling } from "@/lib/errors";
 // usernames exist.
 const DUMMY_HASH = bcrypt.hashSync("dummy-password", 10);
 
+// Check username/password and start a session
 export const POST = withErrorHandling(async (request: Request) => {
   const { username, password } = await request.json();
 

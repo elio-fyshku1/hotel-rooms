@@ -3,7 +3,7 @@
  * The filter is a plain GET form, so the period is kept in the URL.
  */
 import { requireUser } from "@/lib/auth";
-import { getSettings } from "@/lib/settings";
+import { getSettings } from "@/lib/stays";
 import { getHistory, HistoryRow } from "@/lib/history";
 import { formatDateTime, formatDuration, formatMoney, stayTypeLabel } from "@/lib/format";
 import NavBar from "@/components/NavBar";
@@ -20,6 +20,7 @@ interface HistoryPageProps {
   searchParams: Promise<{ from?: string; to?: string; room?: string }>;
 }
 
+/** Reads the filter from the URL, loads the stays and works out the totals. */
 export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const user = await requireUser();
   const settings = await getSettings();
@@ -32,6 +33,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const room = params.room || "";
 
   const rows = await getHistory(from, to, room || undefined);
+  // Shortcut for amounts in the hotel currency
   const money = (amount: number) => formatMoney(amount, settings.currency);
 
   // Totals (cancelled stays don't count)

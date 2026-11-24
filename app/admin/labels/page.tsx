@@ -13,6 +13,7 @@ interface LabelsPageProps {
   searchParams: Promise<{ card?: string }>;
 }
 
+/** Loads the active cards (or the one requested) and renders the label sheet. */
 export default async function LabelsPage({ searchParams }: LabelsPageProps) {
   await requireUser(true);
   const { card } = await searchParams;

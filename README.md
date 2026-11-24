@@ -126,17 +126,14 @@ HTTPS also lets the browser keep the screen on while the board is open (Screen W
 db/schema.sql                 tables, indexes and the SQL functions for the time rules
 scripts/setup-db.mjs          applies the schema, creates the admin user, optional demo data
 
-lib/                          server-side code (except format.ts, pricing.ts, types.ts: shared)
+lib/
   db.ts                       connection pool, query() and transaction()
   auth.ts                     login sessions
-  stays.ts                    check-in / check-out logic (scanCard, applyStayAction, listRooms)
-  pricing.ts                  overtime calculation
-  history.ts                  history query
-  settings.ts                 reading the settings row
-  cardCodes.ts                generating card codes
-  format.ts                   money / time formatting
+  stays.ts                    settings, overtime, check-in / check-out (scanCard, applyStayAction, listRooms)
+  history.ts                  history query (History page and CSV)
+  format.ts                   money / time formatting (server and browser)
   errors.ts                   UserError and the API error wrapper
-  types.ts                    shared types
+  types.ts                    types shared by server and browser
 
 app/                          pages and API routes (Next.js App Router)
   page.tsx                    room board
@@ -145,14 +142,14 @@ app/                          pages and API routes (Next.js App Router)
   admin/labels/page.tsx       printable labels
   api/scan                    POST a scanned code
   api/rooms, api/stays        room board data and stay actions
-  api/admin/*                 settings, rooms, cards, users
+  api/admin/*                 settings, rooms, cards (incl. code generation), users
   api/history/csv             CSV export
 
 components/
-  dashboard/                  room board: RoomBoard, RoomTile, RoomDialog, LateCheckoutDialog, ...
-  admin/                      admin sections and the label sheet
-  useCardReader.ts            listens for the barcode scanner
-  useWakeLock.ts              keeps the screen on
+  NavBar.tsx                  top navigation
+  apiClient.ts                fetch wrapper for the API
+  dashboard/                  room board: RoomBoard, RoomTile, RoomDialog, LateCheckoutDialog, Notice, hooks
+  admin/                      AdminPanel and its sections, LabelSheet
 ```
 
 ## Planned for a later phase

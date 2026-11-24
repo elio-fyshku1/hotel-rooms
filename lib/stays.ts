@@ -1,16 +1,14 @@
 /**
- * Stay logic: check-in, check-out and changes to an open stay.
+ * Hotel logic: settings, check-in, check-out and changes to an open stay.
  *
  * All functions that change data run inside a transaction and lock the room
  * row first, so two devices acting on the same room at the same moment are
  * handled one after the other instead of creating two stays.
  */
 import type { PoolClient } from "pg";
-import { query, transaction } from "./db";
-import { getSettings } from "./settings";
-import { calculateOvertime } from "./pricing";
+import { pool, query, transaction, Queryable } from "./db";
 import { UserError } from "./errors";
-import type { RoomView, ScanResult, Stay, StayAction, StayType } from "./types";
+import type { RoomView, ScanResult, Settings, Stay, StayAction, StayType, Timestamp } from "./types";
 
 // Readers sometimes register the same card twice in a row. A second read of
 // the same room within this many seconds is ignored instead of undoing the
@@ -20,6 +18,51 @@ const DOUBLE_SCAN_SECONDS = 20;
 // Workers can cancel a mistaken check-in only shortly after it was made.
 // Admins can cancel at any time.
 const WORKER_CANCEL_MINUTES = 10;
+
+
+// -----------------------------------------------------------------------------
+// Settings and overtime
+// -----------------------------------------------------------------------------
+
+/**
+ * Loads the settings row (prices, time rules, timezone). Times are formatted
+ * as "HH:MM" so they can go straight into <input type="time"> fields.
+ */
+export async function getSettings(db: Queryable = pool): Promise<Settings> {
+  const rows = await query<Settings>(
+    `select hotel_name, currency, timezone,
+            short_price, short_minutes, night_price,
+            to_char(night_start, 'HH24:MI')    as night_start,
+            to_char(night_end, 'HH24:MI')      as night_end,
+            to_char(night_checkout, 'HH24:MI') as night_checkout,
+            extra_hour_price, grace_minutes, require_cleaning
+       from settings
+      where id = 1`,
+    [],
+    db
+  );
+  return rows[0];
+}
+
+/**
+ * How many minutes a stay is past its deadline at `now`, and the suggested
+ * extra charge: per started hour, and only once the grace period is over.
+ *
+ * Example with grace 10 min and 10 EUR/hour:
+ *   8 min late  -> 0 EUR (inside grace)
+ *   25 min late -> 10 EUR (1 started hour)
+ *   70 min late -> 20 EUR (2 started hours)
+ */
+function calculateOvertime(expectedOut: Timestamp, now: Date, settings: Settings) {
+  const minutesLate = Math.floor((now.getTime() - new Date(expectedOut).getTime()) / 60000);
+
+  if (minutesLate <= settings.grace_minutes) {
+    return { minutes: Math.max(minutesLate, 0), charge: 0 };
+  }
+
+  const startedHours = Math.ceil(minutesLate / 60);
+  return { minutes: minutesLate, charge: startedHours * settings.extra_hour_price };
+}
 
 
 // -----------------------------------------------------------------------------

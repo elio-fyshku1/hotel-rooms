@@ -13,13 +13,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { RoomView, ScanResult, Settings, Stay, StayAction, StayType } from "@/lib/types";
 import { formatDuration, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
 import { sendJson } from "@/components/apiClient";
-import { useCardReader } from "@/components/useCardReader";
-import { useWakeLock } from "@/components/useWakeLock";
-import { getRoomStatus } from "./roomStatus";
-import RoomTile from "./RoomTile";
+import { useCardReader, useWakeLock } from "./hooks";
+import RoomTile, { getRoomStatus } from "./RoomTile";
 import RoomDialog from "./RoomDialog";
 import LateCheckoutDialog, { LateCheckout } from "./LateCheckoutDialog";
-import ConfirmDialog from "./ConfirmDialog";
 import Notice, { NoticeData } from "./Notice";
 
 const REFRESH_INTERVAL_MS = 5000;
@@ -31,6 +28,7 @@ interface BoardData {
   rooms: RoomView[];
 }
 
+/** Room board with its data, timers, scanner handling and dialogs. */
 export default function RoomBoard() {
   // --- Data from the server ---
   const [data, setData] = useState<BoardData | null>(null);
@@ -86,6 +84,7 @@ export default function RoomBoard() {
 
   // Esc closes the room dialog
   useEffect(() => {
+    // Close the dialog on Esc
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpenRoomId(null);
     }
@@ -405,19 +404,29 @@ export default function RoomBoard() {
         />
       )}
 
+      {/* A card was scanned for a room that is still waiting for cleaning */}
       {dirtyRoomScan && (
-        <ConfirmDialog
-          title={`Dhoma ${dirtyRoomScan.room} nuk është pastruar`}
-          message="Klienti i fundit u largua dhe dhoma nuk është shënuar si e pastruar. Të regjistrohet hyrja gjithsesi?"
-          confirmLabel="Po, regjistro hyrjen"
-          cancelLabel="Jo, jep një dhomë tjetër"
-          onConfirm={() => {
-            const code = dirtyRoomScan.code;
-            setDirtyRoomScan(null);
-            handleScan(code, true);
-          }}
-          onCancel={() => setDirtyRoomScan(null)}
-        />
+        <div className="overlay">
+          <div className="modal">
+            <h2>Dhoma {dirtyRoomScan.room} nuk është pastruar</h2>
+            <p>Klienti i fundit u largua dhe dhoma nuk është shënuar si e pastruar. Të regjistrohet hyrja gjithsesi?</p>
+            <div className="stack">
+              <button
+                className="btn red big"
+                onClick={() => {
+                  const code = dirtyRoomScan.code;
+                  setDirtyRoomScan(null);
+                  handleScan(code, true);
+                }}
+              >
+                Po, regjistro hyrjen
+              </button>
+              <button className="btn big" onClick={() => setDirtyRoomScan(null)}>
+                Jo, jep një dhomë tjetër
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}

@@ -5,13 +5,14 @@
 import { useState } from "react";
 import type { Settings } from "@/lib/types";
 import { sendJson } from "@/components/apiClient";
-import type { RunChange } from "./types";
+import type { RunChange } from "./AdminPanel";
 
 interface SettingsSectionProps {
   settings: Settings;
   runChange: RunChange;
 }
 
+/** Form with all settings; saved together with one button. */
 export default function SettingsSection({ settings, runChange }: SettingsSectionProps) {
   const [form, setForm] = useState<Settings>(settings);
 

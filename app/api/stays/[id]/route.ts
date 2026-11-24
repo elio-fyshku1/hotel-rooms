@@ -7,6 +7,7 @@ import { requireApiUser } from "@/lib/auth";
 import { applyStayAction } from "@/lib/stays";
 import { withErrorHandling } from "@/lib/errors";
 
+// Apply a worker action (checkout, extend, set_type, cancel) to a stay
 export const POST = withErrorHandling(
   async (request: Request, context: { params: Promise<{ id: string }> }) => {
     const user = await requireApiUser();

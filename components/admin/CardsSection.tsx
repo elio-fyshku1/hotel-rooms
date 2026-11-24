@@ -11,7 +11,7 @@
  */
 import { useRef, useState } from "react";
 import { sendJson } from "@/components/apiClient";
-import type { AdminCard, AdminRoom, RunChange } from "./types";
+import type { AdminCard, AdminRoom, RunChange } from "./AdminPanel";
 
 interface CardsSectionProps {
   rooms: AdminRoom[];
@@ -19,6 +19,7 @@ interface CardsSectionProps {
   runChange: RunChange;
 }
 
+/** Card list, bulk creation, single card form and label printing link. */
 export default function CardsSection({ rooms, cards, runChange }: CardsSectionProps) {
   const activeRooms = rooms.filter((room) => room.active);
   const [roomId, setRoomId] = useState("");
@@ -45,6 +46,7 @@ export default function CardsSection({ rooms, cards, runChange }: CardsSectionPr
     codeInputRef.current?.focus();
   }
 
+  // Generate a card for every active room that has none yet
   function addCardsForAllRooms() {
     runChange(
       () => sendJson("/api/admin/cards", { allRoomsWithoutCard: true }),
@@ -52,6 +54,7 @@ export default function CardsSection({ rooms, cards, runChange }: CardsSectionPr
     );
   }
 
+  // Disable a lost card, or enable it again
   function toggleCard(card: AdminCard) {
     runChange(
       () => sendJson("/api/admin/cards", { id: card.id, active: !card.active }, "PATCH"),

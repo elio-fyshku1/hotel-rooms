@@ -10,7 +10,7 @@
  */
 import type { RoomView, Settings, StayAction, StayType } from "@/lib/types";
 import { formatCountdown, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
-import type { RoomStatus } from "./roomStatus";
+import type { RoomStatus } from "./RoomTile";
 
 interface RoomDialogProps {
   room: RoomView;
@@ -24,6 +24,7 @@ interface RoomDialogProps {
   onStayAction: (action: StayAction) => void;
 }
 
+/** Dialog frame; the content depends on whether the room has a guest. */
 export default function RoomDialog(props: RoomDialogProps) {
   const { room, settings, onClose } = props;
 
@@ -77,6 +78,7 @@ function FreeRoomContent({ status, settings, busy, onCheckIn, onMarkCleaned }: R
 function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction }: RoomDialogProps) {
   const stay = room.stay!;
   const tz = settings.timezone;
+  // Shortcut for amounts in the hotel currency
   const money = (amount: number) => formatMoney(amount, settings.currency);
 
   const remaining = new Date(stay.expected_out).getTime() - now;

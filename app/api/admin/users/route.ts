@@ -20,6 +20,7 @@ function checkPassword(password: unknown): string {
   return value;
 }
 
+// Create a user with a hashed password
 export const POST = withErrorHandling(async (request: Request) => {
   const admin = await requireApiUser(true);
   if (admin instanceof NextResponse) return admin;
@@ -38,6 +39,7 @@ export const POST = withErrorHandling(async (request: Request) => {
   return NextResponse.json({ ok: true });
 });
 
+// Change password, active flag and/or role of a user
 export const PATCH = withErrorHandling(async (request: Request) => {
   const admin = await requireApiUser(true);
   if (admin instanceof NextResponse) return admin;

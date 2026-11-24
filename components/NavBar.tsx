@@ -12,10 +12,12 @@ interface NavBarProps {
   hotelName: string;
 }
 
+/** Navigation bar shown at the top of every page after login. */
 export default function NavBar({ user, hotelName }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // End the session and go to the login page
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");

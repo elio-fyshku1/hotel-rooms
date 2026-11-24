@@ -7,6 +7,7 @@ import { requireApiUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { withErrorHandling } from "@/lib/errors";
 
+// Clear the needs_cleaning flag of a room
 export const POST = withErrorHandling(
   async (_request: Request, context: { params: Promise<{ id: string }> }) => {
     const user = await requireApiUser();

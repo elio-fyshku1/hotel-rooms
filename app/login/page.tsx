@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+/** Username/password form; on success goes to the room board. */
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Send the credentials to the API and show its error message if login fails
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);

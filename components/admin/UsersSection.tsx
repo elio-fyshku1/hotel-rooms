@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 import { sendJson } from "@/components/apiClient";
-import type { AdminUser, RunChange } from "./types";
+import type { AdminUser, RunChange } from "./AdminPanel";
 
 interface UsersSectionProps {
   users: AdminUser[];
@@ -15,14 +15,17 @@ interface UsersSectionProps {
 
 const EMPTY_FORM = { username: "", full_name: "", password: "", role: "worker" };
 
+/** Form to add a user and the list of users with their actions. */
 export default function UsersSection({ users, currentUserId, runChange }: UsersSectionProps) {
   const [form, setForm] = useState(EMPTY_FORM);
 
+  // Create the user from the form and clear it
   async function addUser() {
     const ok = await runChange(() => sendJson("/api/admin/users", form), "Përdoruesi u shtua.");
     if (ok) setForm(EMPTY_FORM);
   }
 
+  // Ask for a new password and save it
   function resetPassword(user: AdminUser) {
     const password = prompt(`Fjalëkalimi i ri për ${user.username} (të paktën 6 karaktere)`);
     if (password) {
@@ -30,6 +33,7 @@ export default function UsersSection({ users, currentUserId, runChange }: UsersS
     }
   }
 
+  // Disable a user (can no longer log in) or enable them again
   function toggleUser(user: AdminUser) {
     runChange(
       () => sendJson("/api/admin/users", { id: user.id, active: !user.active }, "PATCH"),

@@ -17,6 +17,7 @@ interface NoticeProps {
   onClose: () => void;
 }
 
+/** Title, optional text and optional action buttons. */
 export default function Notice({ notice, onClose }: NoticeProps) {
   return (
     <div className={`notice ${notice.kind}`} onClick={onClose}>

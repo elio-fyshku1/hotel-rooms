@@ -18,6 +18,7 @@ function nonNegative(value: unknown, fieldName: string): number {
   return number;
 }
 
+// Validate the form values and save them in the settings row
 export const POST = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;

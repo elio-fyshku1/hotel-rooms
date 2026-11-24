@@ -8,6 +8,7 @@ import { requireApiUser } from "@/lib/auth";
 import { checkInWithoutCard } from "@/lib/stays";
 import { withErrorHandling } from "@/lib/errors";
 
+// Check a room in without a card (type chosen by the worker)
 export const POST = withErrorHandling(
   async (request: Request, context: { params: Promise<{ id: string }> }) => {
     const user = await requireApiUser();

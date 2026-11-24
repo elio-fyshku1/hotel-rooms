@@ -25,6 +25,7 @@ interface LateCheckoutDialogProps {
   onCancel: () => void;
 }
 
+/** Two choices: check out without extra, or with the amount in the field. */
 export default function LateCheckoutDialog({ checkout, currency, busy, onConfirm, onCancel }: LateCheckoutDialogProps) {
   const [extra, setExtra] = useState(String(checkout.suggestedExtra));
   const extraAmount = Number(extra) || 0;

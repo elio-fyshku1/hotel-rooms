@@ -5,22 +5,25 @@
  */
 import { useState } from "react";
 import { sendJson } from "@/components/apiClient";
-import type { AdminRoom, RunChange } from "./types";
+import type { AdminRoom, RunChange } from "./AdminPanel";
 
 interface RoomsSectionProps {
   rooms: AdminRoom[];
   runChange: RunChange;
 }
 
+/** Form to add rooms and a button per room to enable/disable it. */
 export default function RoomsSection({ rooms, runChange }: RoomsSectionProps) {
   const [numbers, setNumbers] = useState("");
   const [floor, setFloor] = useState("");
 
+  // Add the rooms typed in the field (e.g. "1-22") and clear it
   async function addRooms() {
     const ok = await runChange(() => sendJson("/api/admin/rooms", { numbers, floor }), "Dhomat u shtuan.");
     if (ok) setNumbers("");
   }
 
+  // Disable a room (e.g. under repair) or enable it again
   function toggleRoom(room: AdminRoom) {
     runChange(
       () => sendJson("/api/admin/rooms", { id: room.id, active: !room.active }, "PATCH"),
