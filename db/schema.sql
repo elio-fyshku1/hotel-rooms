@@ -1,15 +1,15 @@
 -- =============================================================================
 -- Hotel room tracker - database schema (PostgreSQL 13+)
 --
--- Every statement is idempotent ("if not exists" / "or replace"), so the file
--- can be applied again after an update without losing data.
+-- Every statement can safely run again ("if not exists" / "or replace"):
+-- scripts/setup-db.mjs applies this file on every install and update.
 -- =============================================================================
 
 
 -- -----------------------------------------------------------------------------
--- users
--- People who can log in. "worker" = reception staff, "admin" = owner/manager.
--- Users are never deleted, only deactivated, so old stays keep their author.
+-- users: everyone who can log in.
+-- "worker" = reception staff, "admin" = owner/manager (also sees Administrimi).
+-- Users are deactivated, never deleted, so old stays keep the worker's name.
 -- -----------------------------------------------------------------------------
 create table if not exists users (
   id            serial primary key,
@@ -23,25 +23,21 @@ create table if not exists users (
 
 
 -- -----------------------------------------------------------------------------
--- rooms
--- needs_cleaning is set to true when a guest checks out (if the cleaning step
--- is enabled in settings) and back to false when someone marks it as cleaned.
+-- rooms: one row per room. Inactive rooms (e.g. under repair) are hidden from
+-- the room board but keep their history.
 -- -----------------------------------------------------------------------------
 create table if not exists rooms (
-  id             serial primary key,
-  number         text not null unique,
-  floor          int,
-  active         boolean not null default true,
-  needs_cleaning boolean not null default false,
-  created_at     timestamptz not null default now()
+  id         serial primary key,
+  number     text not null unique,
+  active     boolean not null default true,
+  created_at timestamptz not null default now()
 );
 
 
 -- -----------------------------------------------------------------------------
--- key_cards
--- One row per physical room key card. "code" is whatever the reader types when
--- the card is presented: the NFC/RFID chip UID, or a barcode if one is used.
--- A room can have more than one card. Lost cards are deactivated, not deleted.
+-- key_cards: one row per physical key card. "code" is the number printed as a
+-- barcode on the back of the card. A room can have several cards; a lost card
+-- is deactivated so scanning it no longer works.
 -- -----------------------------------------------------------------------------
 create table if not exists key_cards (
   id         serial primary key,
@@ -54,8 +50,7 @@ create table if not exists key_cards (
 
 
 -- -----------------------------------------------------------------------------
--- settings
--- Exactly one row (id = 1). Prices, time rules and the hotel timezone.
+-- settings: exactly one row (id = 1) with the prices and the time rules.
 -- -----------------------------------------------------------------------------
 create table if not exists settings (
   id               int primary key default 1 check (id = 1),
@@ -65,31 +60,28 @@ create table if not exists settings (
   short_price      numeric(10,2) not null default 20,
   short_minutes    int not null default 120,
   night_price      numeric(10,2) not null default 40,
-  night_start      time not null default '21:00',   -- check-ins from this time are "night" stays
-  night_end        time not null default '06:00',   -- ...until this time in the morning
-  night_checkout   time not null default '12:00',   -- night guests must leave by this time
+  night_start      time not null default '21:00',    -- check-ins from this time are night stays
+  night_end        time not null default '06:00',    -- ...until this time in the morning
+  night_checkout   time not null default '12:00',    -- night guests leave by this time
   extra_hour_price numeric(10,2) not null default 10, -- overtime charge per started hour
-  grace_minutes    int not null default 10,         -- overtime tolerated before suggesting a charge
-  require_cleaning boolean not null default true    -- room waits for "cleaned" after checkout
+  grace_minutes    int not null default 10           -- overtime tolerated before charging
 );
 
 insert into settings (id) values (1) on conflict (id) do nothing;
 
 
 -- -----------------------------------------------------------------------------
--- stays
--- One row per guest visit, from the check-in scan to the check-out scan.
---   status = 'open'      guest is (or may still be) in the room
---   status = 'closed'    checked out normally
---   status = 'cancelled' check-in was a mistake (kept for the audit trail)
--- base_price is the price of the stay type, extra_charge collects overtime and
--- extensions. Prices are copied into the row so later price changes don't
--- rewrite history.
+-- stays: one row per guest visit, from the check-in scan to the check-out scan.
+--   status 'open'      the guest is in the room (or may still be)
+--   status 'closed'    checked out
+--   status 'cancelled' the check-in was a mistake; kept so nothing disappears
+--
+-- base_price is copied from the settings at check-in, so a later price change
+-- doesn't rewrite history. extra_charge adds up extensions and overtime.
 -- -----------------------------------------------------------------------------
 create table if not exists stays (
   id             serial primary key,
   room_id        int not null references rooms(id),
-  card_id        int references key_cards(id),
   stay_type      text not null check (stay_type in ('short', 'night')),
   status         text not null default 'open' check (status in ('open', 'closed', 'cancelled')),
   check_in       timestamptz not null default now(),
@@ -97,52 +89,32 @@ create table if not exists stays (
   check_out      timestamptz,
   base_price     numeric(10,2) not null,
   extra_charge   numeric(10,2) not null default 0,
-  currency       text not null,
   checked_in_by  int references users(id),
   checked_out_by int references users(id)
 );
 
--- A room can never have two open stays at the same time, even if two
--- devices scan at the same moment.
+-- A room can never have two open stays, even if two devices scan at the same moment
 create unique index if not exists stays_one_open_per_room on stays(room_id) where status = 'open';
 
--- History and reports filter by check-in date.
+-- The History page filters by check-in date
 create index if not exists stays_check_in_idx on stays(check_in);
 
 
--- -----------------------------------------------------------------------------
--- stay_events
--- Audit log: every action taken on a stay, who did it and the amount involved.
--- Used to answer "who checked this room in/out and what was charged".
--- -----------------------------------------------------------------------------
-create table if not exists stay_events (
-  id       serial primary key,
-  stay_id  int not null references stays(id) on delete cascade,
-  kind     text not null,  -- check_in, check_out, extend_hour, extend_block, set_type, cancel
-  amount   numeric(10,2) not null default 0,
-  user_id  int references users(id),
-  at       timestamptz not null default now(),
-  note     text not null default ''
-);
-
-create index if not exists stay_events_stay_idx on stay_events(stay_id);
-
-
 -- =============================================================================
--- Functions
--- The time rules live in the database so they are always evaluated in the
--- hotel's timezone, no matter where the app server runs.
+-- Time rules
+-- They are SQL functions so they always use the hotel's timezone (from
+-- settings), whatever timezone the server itself runs in.
 -- =============================================================================
 
--- Returns 'night' when the given moment falls inside the night window
--- (e.g. 21:00 - 06:00, which wraps past midnight), otherwise 'short'.
+-- 'night' if the given moment is inside the night window (e.g. 21:00 - 06:00,
+-- which crosses midnight), otherwise 'short'.
 create or replace function auto_stay_type(at_ts timestamptz) returns text
 language sql stable as $$
   select case
-    -- Window that wraps midnight, e.g. 21:00 -> 06:00
+    -- Window that crosses midnight, e.g. 21:00 -> 06:00
     when s.night_start > s.night_end and (x.local_time >= s.night_start or x.local_time < s.night_end)
       then 'night'
-    -- Window inside one day, e.g. 01:00 -> 05:00
+    -- Window within one day, e.g. 01:00 -> 05:00
     when s.night_start <= s.night_end and x.local_time >= s.night_start and x.local_time < s.night_end
       then 'night'
     else 'short'
@@ -153,9 +125,9 @@ language sql stable as $$
 $$;
 
 
--- Returns the moment a stay of the given type, started at from_ts, has to end.
+-- When a stay of the given type that started at from_ts has to end:
 --   short: start + short_minutes
---   night: the next night_checkout time (same day if checked in after midnight)
+--   night: the next night_checkout (the same day if checked in after midnight)
 create or replace function stay_expected_out(stype text, from_ts timestamptz) returns timestamptz
 language sql stable as $$
   select case
@@ -163,7 +135,7 @@ language sql stable as $$
       from_ts + make_interval(mins => s.short_minutes)
     else (
       case
-        -- Checked in after midnight but before checkout time: leave the same day
+        -- Checked in after midnight, before checkout time: leave the same day
         when (from_ts at time zone s.timezone)::time < s.night_checkout
           then (from_ts at time zone s.timezone)::date + s.night_checkout
         -- Checked in in the evening: leave the next day
@@ -176,7 +148,7 @@ language sql stable as $$
 $$;
 
 
--- Returns the current price for a stay type.
+-- Current price of a stay type.
 create or replace function stay_price(stype text) returns numeric
 language sql stable as $$
   select case when stype = 'short' then short_price else night_price end

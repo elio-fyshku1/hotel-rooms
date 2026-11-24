@@ -2,18 +2,18 @@
 /**
  * The room board (home page).
  *
- * - Loads all rooms from /api/rooms and refreshes every few seconds, so
- *   several devices at reception stay in sync.
+ * - Loads the rooms from /api/rooms and reloads them every few seconds, so
+ *   several devices at reception always show the same state.
  * - Ticks every second to update the countdowns.
- * - Listens for the barcode scanner (useCardReader) and sends each scanned
- *   code to /api/scan, which checks the room in or out.
- * - Shows the dialogs and messages that follow from a scan or a tap on a room.
+ * - Sends every scanned card code to /api/scan, which checks the room in or out,
+ *   and shows the result as a message at the bottom of the screen.
+ * - Opens the room dialog and the late check-out dialog.
  */
 import { useCallback, useEffect, useState } from "react";
-import type { RoomView, ScanResult, Settings, Stay, StayAction, StayType } from "@/lib/types";
+import type { RoomView, ScanResult, Settings, Stay, StayAction } from "@/lib/types";
 import { formatDuration, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
 import { sendJson } from "@/components/apiClient";
-import { useCardReader, useWakeLock } from "./hooks";
+import { useCardReader } from "./useCardReader";
 import RoomTile, { getRoomStatus } from "./RoomTile";
 import RoomDialog from "./RoomDialog";
 import LateCheckoutDialog, { LateCheckout } from "./LateCheckoutDialog";
@@ -22,6 +22,7 @@ import Notice, { NoticeData } from "./Notice";
 const REFRESH_INTERVAL_MS = 5000;
 const NOTICE_DURATION_MS = 9000;
 
+/** Response of GET /api/rooms */
 interface BoardData {
   serverTime: string;
   settings: Settings;
@@ -34,8 +35,8 @@ export default function RoomBoard() {
   const [data, setData] = useState<BoardData | null>(null);
   const [connectionError, setConnectionError] = useState(false);
 
-  // Difference between the server clock and this device's clock, in ms.
-  // Countdowns use server time so a wrong device clock doesn't matter.
+  // Countdowns use the server's clock, so a device with the wrong time still
+  // shows the right numbers. clockOffset = server time - device time (ms).
   const [clockOffset, setClockOffset] = useState(0);
   const [tick, setTick] = useState(() => Date.now());
   const now = tick + clockOffset;
@@ -43,18 +44,15 @@ export default function RoomBoard() {
   // --- UI state ---
   const [openRoomId, setOpenRoomId] = useState<number | null>(null);
   const [lateCheckout, setLateCheckout] = useState<LateCheckout | null>(null);
-  const [dirtyRoomScan, setDirtyRoomScan] = useState<{ code: string; room: string } | null>(null);
   const [notice, setNotice] = useState<NoticeData | null>(null);
   const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useWakeLock();
-
   // ---------------------------------------------------------------------------
-  // Loading and refreshing
+  // Loading and timers
   // ---------------------------------------------------------------------------
 
-  /** Fetches the rooms and settings from the server. */
+  // Fetch rooms and settings; go to the login page if the session has expired
   const loadRooms = useCallback(async () => {
     try {
       const response = await fetch("/api/rooms", { cache: "no-store" });
@@ -71,7 +69,7 @@ export default function RoomBoard() {
     }
   }, []);
 
-  // Initial load, periodic refresh and the one-second clock
+  // First load, then reload every few seconds, and a one-second clock tick
   useEffect(() => {
     loadRooms();
     const refreshTimer = setInterval(loadRooms, REFRESH_INTERVAL_MS);
@@ -84,7 +82,7 @@ export default function RoomBoard() {
 
   // Esc closes the room dialog
   useEffect(() => {
-    // Close the dialog on Esc
+    // Called for every key press on the page
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpenRoomId(null);
     }
@@ -100,16 +98,16 @@ export default function RoomBoard() {
   }, [notice]);
 
   // ---------------------------------------------------------------------------
-  // Messages after check-in / check-out
+  // Messages
   // ---------------------------------------------------------------------------
 
-  const settings = data?.settings;
-  const timezone = settings?.timezone ?? "Europe/Tirane";
-  const shortMinutes = settings?.short_minutes ?? 120;
+  const timezone = data?.settings.timezone ?? "Europe/Tirane";
+  const currency = data?.settings.currency ?? "EUR";
+  const shortMinutes = data?.settings.short_minutes ?? 120;
 
-  /** Shows the check-in message, with buttons to switch the stay type or undo. */
+  /** Check-in message, with buttons to switch 2 hours / night or undo it. */
   function showCheckedIn(room: string, stay: Stay) {
-    const otherType: StayType = stay.stay_type === "short" ? "night" : "short";
+    const otherType = stay.stay_type === "short" ? "night" : "short";
 
     setNotice({
       kind: "checkin",
@@ -117,7 +115,7 @@ export default function RoomBoard() {
       text:
         `${stayTypeLabel(stay.stay_type, shortMinutes)} · ` +
         `${formatTime(stay.check_in, timezone)} deri ${formatTime(stay.expected_out, timezone)} · ` +
-        `Merr ${formatMoney(stay.base_price, stay.currency)}`,
+        `Merr ${formatMoney(stay.base_price, currency)}`,
       actions: [
         {
           label: otherType === "night" ? "Ndrysho në natë" : `Ndrysho në ${stayTypeLabel("short", shortMinutes)}`,
@@ -137,18 +135,18 @@ export default function RoomBoard() {
     });
   }
 
-  /** Shows the check-out message with the length of the stay and the total. */
+  /** Check-out message with the length of the stay and the total paid. */
   function showCheckedOut(room: string, stay: Stay) {
     const minutes = (new Date(stay.check_out!).getTime() - new Date(stay.check_in).getTime()) / 60000;
     const total = stay.base_price + stay.extra_charge;
 
-    let text = `Qëndroi ${formatDuration(minutes)} · Totali ${formatMoney(total, stay.currency)}`;
-    if (stay.extra_charge > 0) text += ` (shtesë ${formatMoney(stay.extra_charge, stay.currency)})`;
+    let text = `Qëndroi ${formatDuration(minutes)} · Totali ${formatMoney(total, currency)}`;
+    if (stay.extra_charge > 0) text += ` (shtesë ${formatMoney(stay.extra_charge, currency)})`;
 
     setNotice({ kind: "checkout", title: `Dhoma ${room} - DALJE`, text });
   }
 
-  /** Shows an error message. */
+  /** Error message. */
   function showError(title: string, text?: string) {
     setNotice({ kind: "error", title, text });
   }
@@ -157,16 +155,13 @@ export default function RoomBoard() {
   // Actions
   // ---------------------------------------------------------------------------
 
-  /**
-   * Sends a scanned code to the server and reacts to the result.
-   * `allowDirty` confirms a check-in to a room not marked as cleaned.
-   */
-  async function handleScan(code: string, allowDirty = false) {
+  /** Sends a scanned (or typed) card code to the server and shows the result. */
+  async function handleScan(code: string) {
     if (!code.trim() || busy) return;
     setBusy(true);
 
     try {
-      const scan = await sendJson<ScanResult>("/api/scan", { code, allowDirty });
+      const scan = await sendJson<ScanResult>("/api/scan", { code });
 
       switch (scan.result) {
         case "checked_in":
@@ -176,15 +171,13 @@ export default function RoomBoard() {
           showCheckedOut(scan.room, scan.stay);
           break;
         case "confirm_checkout":
+          // Late: the worker decides about the extra charge in a dialog
           setLateCheckout({
             room: scan.room,
             stayId: scan.stay.id,
             overtimeMinutes: scan.overtimeMinutes,
             suggestedExtra: scan.suggestedExtra,
           });
-          break;
-        case "needs_cleaning":
-          setDirtyRoomScan({ code, room: scan.room });
           break;
         case "double_scan":
           setNotice({ kind: "warning", title: `Dhoma ${scan.room}`, text: "Karta sapo u lexua. Leximi i dytë u injorua." });
@@ -223,7 +216,7 @@ export default function RoomBoard() {
     }
   }
 
-  /** Check-out from the late-checkout dialog. */
+  /** Check-out chosen in the late check-out dialog, with the extra amount. */
   async function confirmLateCheckout(extra: number) {
     if (!lateCheckout) return;
     const result = await runStayAction(lateCheckout.stayId, { action: "checkout", extra });
@@ -233,10 +226,9 @@ export default function RoomBoard() {
     }
   }
 
-  /** An action chosen in the room dialog. */
-  async function handleRoomDialogAction(room: RoomView, action: StayAction) {
-    if (!room.stay) return;
-    const result = await runStayAction(room.stay.id, action);
+  /** Action chosen in the room dialog. Check-out and cancel also close the dialog. */
+  async function handleRoomAction(room: RoomView, action: StayAction) {
+    const result = await runStayAction(room.stay!.id, action);
     if (!result) return;
 
     if (action.action === "checkout") {
@@ -248,81 +240,40 @@ export default function RoomBoard() {
     }
   }
 
-  /** Check-in from the room dialog without a card. */
-  async function handleCheckInWithoutCard(room: RoomView, type: StayType) {
-    setBusy(true);
-    try {
-      const result = await sendJson<{ stay: Stay }>(`/api/rooms/${room.id}/checkin`, { type });
-      setOpenRoomId(null);
-      await loadRooms();
-      showCheckedIn(room.number, result.stay);
-    } catch (error) {
-      showError("Gabim", (error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /** Marks a room as cleaned. */
-  async function handleMarkCleaned(room: RoomView) {
-    try {
-      await sendJson(`/api/rooms/${room.id}/clean`);
-      setOpenRoomId(null);
-      await loadRooms();
-    } catch (error) {
-      showError("Gabim", (error as Error).message);
-    }
-  }
-
-  // Scanner input anywhere on the page (ignored while a dialog needs an answer)
+  // The scanner works anywhere on the page; ignored while the late check-out
+  // dialog waits for an answer
   useCardReader((code) => {
-    if (!lateCheckout && !dirtyRoomScan) handleScan(code);
+    if (!lateCheckout) handleScan(code);
   });
 
   // ---------------------------------------------------------------------------
   // Rendering
   // ---------------------------------------------------------------------------
 
-  if (!data || !settings) {
+  if (!data) {
     return <div className="container muted">{connectionError ? "Problem me lidhjen, po riprovoj..." : "Duke ngarkuar..."}</div>;
   }
 
-  // Count rooms per status for the summary at the top
-  const counts = { free: 0, occupied: 0, overdue: 0, cleaning: 0 };
-  for (const room of data.rooms) {
-    const status = getRoomStatus(room, now);
-    if (status === "free") counts.free++;
-    else if (status === "cleaning") counts.cleaning++;
-    else if (status === "overdue") counts.overdue++;
-    else counts.occupied++;
-  }
+  // Numbers for the summary at the top
+  const statuses = data.rooms.map((room) => getRoomStatus(room, now));
+  const freeCount = statuses.filter((status) => status === "free").length;
+  const overdueRooms = data.rooms.filter((_, index) => statuses[index] === "overdue");
 
-  const overdueRooms = data.rooms.filter((room) => getRoomStatus(room, now) === "overdue");
-
-  // Group rooms by floor (rooms without a floor go in one group)
-  const floors = new Map<string, RoomView[]>();
-  for (const room of data.rooms) {
-    const key = room.floor == null ? "Dhomat" : `Kati ${room.floor}`;
-    floors.set(key, [...(floors.get(key) ?? []), room]);
-  }
-
-  const openRoom = data.rooms.find((room) => room.id === openRoomId) ?? null;
+  // The room whose dialog is open (looked up again after every reload)
+  const openRoom = data.rooms.find((room) => room.id === openRoomId && room.stay) ?? null;
 
   return (
     <div className="container">
       {/* Summary and clock */}
       <div className="row" style={{ marginBottom: 12 }}>
-        <div className="stats">
-          <span className="stat free">Të lira {counts.free}</span>
-          <span className="stat occupied">Të zëna {counts.occupied + counts.overdue}</span>
-          {counts.overdue > 0 && <span className="stat overdue">Kohë e kaluar {counts.overdue}</span>}
-          {counts.cleaning > 0 && <span className="stat cleaning">Për pastrim {counts.cleaning}</span>}
-        </div>
+        <span className="stat free">Të lira {freeCount}</span>
+        <span className="stat occupied">Të zëna {data.rooms.length - freeCount}</span>
+        {overdueRooms.length > 0 && <span className="stat overdue">Kohë e kaluar {overdueRooms.length}</span>}
         <span className="spacer" />
         <span className="clock">{new Date(now).toLocaleTimeString("sq-AL", { timeZone: timezone, hourCycle: "h23" })}</span>
       </div>
 
-      {/* Manual entry: the scanner works without clicking here, this is for typing a code by hand */}
+      {/* Typing a code by hand, for a damaged barcode. The scanner itself works without clicking here. */}
       <form
         className="card scan-bar"
         onSubmit={(event) => {
@@ -347,7 +298,7 @@ export default function RoomBoard() {
 
       {connectionError && <div className="muted small">Problem me lidhjen, po riprovoj...</div>}
 
-      {/* Banner while any room is over its time */}
+      {/* Banner while any room is over its time; tapping it opens the first one */}
       {overdueRooms.length > 0 && (
         <button type="button" className="alert alert-pulse" onClick={() => setOpenRoomId(overdueRooms[0].id)}>
           Koha mbaroi: dhoma {overdueRooms.map((room) => room.number).join(", ")}. Kontrolloni dhomën.
@@ -355,78 +306,38 @@ export default function RoomBoard() {
       )}
 
       {/* Room grid */}
-      {[...floors.entries()].map(([floorName, rooms]) => (
-        <section key={floorName}>
-          {floors.size > 1 && <div className="floor-title">{floorName}</div>}
-          <div className="rooms" style={{ marginTop: floors.size > 1 ? 0 : 16 }}>
-            {rooms.map((room) => (
-              <RoomTile
-                key={room.id}
-                room={room}
-                status={getRoomStatus(room, now)}
-                now={now}
-                settings={settings}
-                onOpen={() => setOpenRoomId(room.id)}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="rooms">
+        {data.rooms.map((room) => (
+          <RoomTile key={room.id} room={room} now={now} settings={data.settings} onOpen={() => setOpenRoomId(room.id)} />
+        ))}
+      </div>
 
       {data.rooms.length === 0 && (
-        <div className="card muted" style={{ marginTop: 16 }}>
+        <div className="card muted">
           Nuk ka ende dhoma. Administratori mund t&apos;i shtojë te <a href="/admin">Administrimi</a>.
         </div>
       )}
 
-      {/* Dialogs */}
+      {/* Dialogs and the message at the bottom */}
       {openRoom && (
         <RoomDialog
           room={openRoom}
-          status={getRoomStatus(openRoom, now)}
           now={now}
-          settings={settings}
+          settings={data.settings}
           busy={busy}
           onClose={() => setOpenRoomId(null)}
-          onCheckIn={(type) => handleCheckInWithoutCard(openRoom, type)}
-          onMarkCleaned={() => handleMarkCleaned(openRoom)}
-          onStayAction={(action) => handleRoomDialogAction(openRoom, action)}
+          onStayAction={(action) => handleRoomAction(openRoom, action)}
         />
       )}
 
       {lateCheckout && (
         <LateCheckoutDialog
           checkout={lateCheckout}
-          currency={settings.currency}
+          currency={currency}
           busy={busy}
           onConfirm={confirmLateCheckout}
           onCancel={() => setLateCheckout(null)}
         />
-      )}
-
-      {/* A card was scanned for a room that is still waiting for cleaning */}
-      {dirtyRoomScan && (
-        <div className="overlay">
-          <div className="modal">
-            <h2>Dhoma {dirtyRoomScan.room} nuk është pastruar</h2>
-            <p>Klienti i fundit u largua dhe dhoma nuk është shënuar si e pastruar. Të regjistrohet hyrja gjithsesi?</p>
-            <div className="stack">
-              <button
-                className="btn red big"
-                onClick={() => {
-                  const code = dirtyRoomScan.code;
-                  setDirtyRoomScan(null);
-                  handleScan(code, true);
-                }}
-              >
-                Po, regjistro hyrjen
-              </button>
-              <button className="btn big" onClick={() => setDirtyRoomScan(null)}>
-                Jo, jep një dhomë tjetër
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}

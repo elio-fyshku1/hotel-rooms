@@ -1,6 +1,6 @@
 "use client";
 /**
- * Browser hooks used by the room board.
+ * Listens for the USB barcode scanner on the whole room board page.
  */
 import { useEffect, useRef } from "react";
 
@@ -59,54 +59,5 @@ export function useCardReader(onCode: (code: string) => void): void {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-}
-
-// The Screen Wake Lock API is not in every TypeScript DOM version yet, so the
-// small part we use is described here.
-interface WakeLockSentinel {
-  release: () => Promise<void>;
-}
-
-interface NavigatorWithWakeLock {
-  wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinel> };
-}
-
-/**
- * Keeps the screen from turning off while the room board is open, so the
- * reception PC/tablet always shows the current state of the rooms.
- *
- * The browser releases the lock whenever the tab is hidden, so it is requested
- * again each time the tab becomes visible. Works in Chrome, Edge and Safari
- * 16.4+, over HTTPS or on localhost; elsewhere it does nothing.
- */
-export function useWakeLock(): void {
-  useEffect(() => {
-    let sentinel: WakeLockSentinel | null = null;
-
-    // Ask for the lock (only possible while the page is visible)
-    async function requestLock() {
-      const wakeLock = (navigator as NavigatorWithWakeLock).wakeLock;
-      if (!wakeLock || document.visibilityState !== "visible") return;
-      try {
-        sentinel = await wakeLock.request("screen");
-      } catch {
-        // Refused (e.g. battery saver). The board works the same without it.
-      }
-    }
-
-    // Re-acquire after switching back to this tab
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") requestLock();
-    }
-
-    requestLock();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    // Release the lock when the board is closed
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      sentinel?.release().catch(() => undefined);
-    };
   }, []);
 }

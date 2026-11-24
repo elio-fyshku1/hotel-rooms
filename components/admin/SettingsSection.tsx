@@ -16,7 +16,7 @@ interface SettingsSectionProps {
 export default function SettingsSection({ settings, runChange }: SettingsSectionProps) {
   const [form, setForm] = useState<Settings>(settings);
 
-  /** A labelled input bound to one settings field. */
+  /** A labelled input bound to one settings field (numbers are stored as numbers). */
   function field(key: keyof Settings, label: string, type: "text" | "number" | "time" = "text") {
     return (
       <div>
@@ -39,7 +39,6 @@ export default function SettingsSection({ settings, runChange }: SettingsSection
       <div className="grid">
         {field("hotel_name", "Emri i hotelit")}
         {field("currency", "Monedha (EUR, ALL...)")}
-        {field("timezone", "Zona kohore")}
         {field("short_price", "Çmimi për qëndrim të shkurtër", "number")}
         {field("short_minutes", "Kohëzgjatja e qëndrimit të shkurtër (minuta)", "number")}
         {field("night_price", "Çmimi për natë", "number")}
@@ -48,17 +47,6 @@ export default function SettingsSection({ settings, runChange }: SettingsSection
         {field("night_checkout", "Klientët e natës dalin deri në", "time")}
         {field("extra_hour_price", "Shtesa për çdo orë të filluar", "number")}
         {field("grace_minutes", "Minuta tolerancë para shtesës", "number")}
-        <div>
-          <label htmlFor="require_cleaning">Pastrimi</label>
-          <select
-            id="require_cleaning"
-            value={form.require_cleaning ? "yes" : "no"}
-            onChange={(event) => setForm({ ...form, require_cleaning: event.target.value === "yes" })}
-          >
-            <option value="yes">Pas daljes dhoma pret të shënohet si e pastruar</option>
-            <option value="no">Pas daljes dhoma është menjëherë e lirë</option>
-          </select>
-        </div>
       </div>
       <button
         className="btn blue"

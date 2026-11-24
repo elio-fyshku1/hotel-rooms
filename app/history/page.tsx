@@ -8,8 +8,6 @@ import { getHistory, HistoryRow } from "@/lib/history";
 import { formatDateTime, formatDuration, formatMoney, stayTypeLabel } from "@/lib/format";
 import NavBar from "@/components/NavBar";
 
-export const dynamic = "force-dynamic";
-
 const STATUS_LABELS: Record<HistoryRow["status"], string> = {
   open: "brenda",
   closed: "mbyllur",
@@ -135,9 +133,9 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
                   <td>{formatDateTime(row.check_in, settings.timezone)}</td>
                   <td>{formatDateTime(row.check_out, settings.timezone)}</td>
                   <td>{formatDuration(row.minutes)}</td>
-                  <td>{formatMoney(row.base_price, row.currency)}</td>
-                  <td>{row.extra_charge > 0 ? formatMoney(row.extra_charge, row.currency) : "-"}</td>
-                  <td><b>{formatMoney(row.total, row.currency)}</b></td>
+                  <td>{money(row.base_price)}</td>
+                  <td>{row.extra_charge > 0 ? money(row.extra_charge) : "-"}</td>
+                  <td><b>{money(row.total)}</b></td>
                   <td><span className={`badge ${row.status}`}>{STATUS_LABELS[row.status]}</span></td>
                   <td className="small">
                     {row.checked_in_by}

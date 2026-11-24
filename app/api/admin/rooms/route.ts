@@ -1,7 +1,7 @@
 /**
  * Rooms management. Admins only.
- *   POST  { numbers: "101-110, 201", floor? }   add one or more rooms
- *   PATCH { id, active }                        enable / disable a room
+ *   POST  { numbers: "1-22, 30" }   add one or more rooms
+ *   PATCH { id, active }            enable / disable a room
  */
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
@@ -9,8 +9,8 @@ import { query } from "@/lib/db";
 import { withErrorHandling, UserError } from "@/lib/errors";
 
 /**
- * Turns "101-105, 201 202" into ["101","102","103","104","105","201","202"].
- * Ranges are limited to 500 rooms to catch typos like "101-10100".
+ * Turns "1-4, 10 12" into ["1","2","3","4","10","12"].
+ * A range can have at most 500 rooms, to catch typos like "1-2200".
  */
 function parseRoomNumbers(input: string): string[] {
   const numbers: string[] = [];
@@ -37,18 +37,13 @@ export const POST = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;
 
-  const { numbers, floor } = await request.json();
+  const { numbers } = await request.json();
   const roomNumbers = parseRoomNumbers(String(numbers ?? ""));
   if (roomNumbers.length === 0) throw new UserError("Shkruani të paktën një numër dhome.");
 
-  const floorNumber = floor === "" || floor == null ? null : Number(floor);
-
   // Adding a room that already exists just re-enables it
   for (const number of roomNumbers) {
-    await query(
-      "insert into rooms (number, floor) values ($1, $2) on conflict (number) do update set active = true",
-      [number, floorNumber]
-    );
+    await query("insert into rooms (number) values ($1) on conflict (number) do update set active = true", [number]);
   }
 
   return NextResponse.json({ ok: true, added: roomNumbers.length });

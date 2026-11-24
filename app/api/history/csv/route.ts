@@ -1,5 +1,5 @@
 /**
- * GET /api/history/csv?from=YYYY-MM-DD&to=YYYY-MM-DD&room=101
+ * GET /api/history/csv?from=YYYY-MM-DD&to=YYYY-MM-DD&room=5
  * Downloads the stays of a period as a CSV file (opens in Excel). Admins only.
  */
 import { NextResponse } from "next/server";
@@ -25,14 +25,18 @@ export const GET = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser(true);
   if (user instanceof NextResponse) return user;
 
+  const settings = await getSettings();
+  const tz = settings.timezone;
+
+  // Period from the URL; default is today in the hotel's timezone
+  // ("sv-SE" happens to format dates as YYYY-MM-DD)
   const params = new URL(request.url).searchParams;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: tz });
   const from = params.get("from") || today;
   const to = params.get("to") || from;
-  const room = params.get("room") || undefined;
+  const rows = await getHistory(from, to, params.get("room") || undefined);
 
-  const [rows, settings] = await Promise.all([getHistory(from, to, room), getSettings()]);
-  const tz = settings.timezone;
+  // One line per stay, all amounts in the hotel currency
 
   const header = [
     "id", "dhoma", "lloji", "statusi", "hyrja", "afati", "dalja", "minuta",
@@ -42,7 +46,7 @@ export const GET = withErrorHandling(async (request: Request) => {
     [
       r.id, r.room, r.stay_type, r.status,
       csvDate(r.check_in, tz), csvDate(r.expected_out, tz), csvDate(r.check_out, tz),
-      r.minutes, r.base_price, r.extra_charge, r.total, r.currency,
+      r.minutes, r.base_price, r.extra_charge, r.total, settings.currency,
       r.checked_in_by, r.checked_out_by,
     ]
       .map(csvField)
@@ -50,7 +54,7 @@ export const GET = withErrorHandling(async (request: Request) => {
   );
 
   // The BOM at the start makes Excel read the file as UTF-8 (ë, ç)
-  const csv = "﻿" + [header.join(","), ...lines].join("\n");
+  const csv = "\uFEFF" + [header.join(","), ...lines].join("\n");
 
   return new Response(csv, {
     headers: {
