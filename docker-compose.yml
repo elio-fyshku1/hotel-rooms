@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hotel
+      POSTGRES_PASSWORD: change-this-db-password
+      POSTGRES_DB: hotel
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on: [db]
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://hotel:change-this-db-password@db:5432/hotel
+      SESSION_SECRET: change-me-to-a-long-random-string
+      COOKIE_SECURE: "false"   # set "true" once you put HTTPS in front (Caddy/Nginx)
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+      TZ: Europe/Tirane
+
+volumes:
+  pgdata:

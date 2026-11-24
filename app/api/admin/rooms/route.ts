@@ -1,0 +1,63 @@
+/**
+ * Rooms management. Admins only.
+ *   POST  { numbers: "101-110, 201", floor? }   add one or more rooms
+ *   PATCH { id, active }                        enable / disable a room
+ */
+import { NextResponse } from "next/server";
+import { requireApiUser } from "@/lib/auth";
+import { query } from "@/lib/db";
+import { withErrorHandling, UserError } from "@/lib/errors";
+
+/**
+ * Turns "101-105, 201 202" into ["101","102","103","104","105","201","202"].
+ * Ranges are limited to 500 rooms to catch typos like "101-10100".
+ */
+function parseRoomNumbers(input: string): string[] {
+  const numbers: string[] = [];
+
+  for (const part of input.split(/[,\s]+/).filter(Boolean)) {
+    const range = part.match(/^(\d+)-(\d+)$/);
+    if (!range) {
+      numbers.push(part);
+      continue;
+    }
+    const first = Number(range[1]);
+    const last = Number(range[2]);
+    if (last < first || last - first > 500) {
+      throw new UserError(`Interval i gabuar: ${part}`);
+    }
+    for (let n = first; n <= last; n++) numbers.push(String(n));
+  }
+
+  return numbers;
+}
+
+export const POST = withErrorHandling(async (request: Request) => {
+  const user = await requireApiUser(true);
+  if (user instanceof NextResponse) return user;
+
+  const { numbers, floor } = await request.json();
+  const roomNumbers = parseRoomNumbers(String(numbers ?? ""));
+  if (roomNumbers.length === 0) throw new UserError("Shkruani të paktën një numër dhome.");
+
+  const floorNumber = floor === "" || floor == null ? null : Number(floor);
+
+  // Adding a room that already exists just re-enables it
+  for (const number of roomNumbers) {
+    await query(
+      "insert into rooms (number, floor) values ($1, $2) on conflict (number) do update set active = true",
+      [number, floorNumber]
+    );
+  }
+
+  return NextResponse.json({ ok: true, added: roomNumbers.length });
+});
+
+export const PATCH = withErrorHandling(async (request: Request) => {
+  const user = await requireApiUser(true);
+  if (user instanceof NextResponse) return user;
+
+  const { id, active } = await request.json();
+  await query("update rooms set active = $2 where id = $1", [id, Boolean(active)]);
+  return NextResponse.json({ ok: true });
+});
