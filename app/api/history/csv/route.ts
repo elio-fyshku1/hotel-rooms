@@ -40,13 +40,13 @@ export const GET = withErrorHandling(async (request: Request) => {
 
   const header = [
     "id", "dhoma", "lloji", "statusi", "hyrja", "afati", "dalja", "minuta",
-    "cmimi", "shtese", "totali", "monedha", "hyrja_nga", "dalja_nga",
+    "cmimi", "shtese", "totali", "paguar", "pa_paguar", "monedha", "hyrja_nga", "dalja_nga",
   ];
   const lines = rows.map((r) =>
     [
       r.id, r.room, r.stay_type, r.status,
       csvDate(r.check_in, tz), csvDate(r.expected_out, tz), csvDate(r.check_out, tz),
-      r.minutes, r.base_price, r.extra_charge, r.total, r.currency,
+      r.minutes, r.base_price, r.extra_charge, r.total, r.paid_amount, r.due, r.currency,
       r.checked_in_by, r.checked_out_by,
     ]
       .map(csvField)

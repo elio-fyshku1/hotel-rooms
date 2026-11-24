@@ -2,14 +2,15 @@
 /**
  * Dialog opened by tapping a room. What it offers depends on the room:
  *
- *   free / cleaning  -> mark as cleaned, or check in without a card
- *   occupied         -> check out, +1 hour, switch 2 hours/night, cancel
+ *   free / cleaning  -> collect an unpaid last stay, mark as cleaned,
+ *                       or check in without a card
+ *   occupied         -> take payment, check out, +1 hour, switch 2 hours/night, cancel
  *   overdue          -> "guest left" (check out, no extra) or charge extra
  *
  * The dialog only reports what the worker chose; RoomBoard does the API calls.
  */
 import type { RoomView, Settings, StayAction, StayType } from "@/lib/types";
-import { formatCountdown, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
+import { amountDue, formatCountdown, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
 import type { RoomStatus } from "./RoomTile";
 
 interface RoomDialogProps {
@@ -22,6 +23,7 @@ interface RoomDialogProps {
   onCheckIn: (type: StayType) => void;
   onMarkCleaned: () => void;
   onStayAction: (action: StayAction) => void;
+  onPayLastStay: () => void;
 }
 
 /** Dialog frame; the content depends on whether the room has a guest. */
@@ -52,9 +54,21 @@ export default function RoomDialog(props: RoomDialogProps) {
 }
 
 /** Free or waiting-for-cleaning room. */
-function FreeRoomContent({ status, settings, busy, onCheckIn, onMarkCleaned }: RoomDialogProps) {
+function FreeRoomContent({ room, status, settings, busy, onCheckIn, onMarkCleaned, onPayLastStay }: RoomDialogProps) {
   return (
     <div className="stack">
+      {/* The last guest left without paying: ask for the money first */}
+      {room.unpaid && (
+        <>
+          <div className="alert">
+            Klienti i fundit nuk ka paguar {formatMoney(room.unpaid.amount, settings.currency)}.
+          </div>
+          <button className="btn green big" disabled={busy} onClick={onPayLastStay}>
+            U pagua {formatMoney(room.unpaid.amount, settings.currency)}
+          </button>
+        </>
+      )}
+
       {status === "cleaning" && (
         <button className="btn amber big" disabled={busy} onClick={onMarkCleaned}>
           Shëno si të pastruar
@@ -83,6 +97,7 @@ function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction }
 
   const remaining = new Date(stay.expected_out).getTime() - now;
   const minutesOver = Math.floor(-remaining / 60000);
+  const due = amountDue(stay);
 
   return (
     <>
@@ -98,15 +113,25 @@ function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction }
           {remaining > 0 ? formatCountdown(remaining) : `+${formatCountdown(-remaining)}`}
         </dd>
 
-        <dt>Paguar</dt>
+        <dt>Çmimi</dt>
         <dd>
           {money(stay.base_price)}
           {stay.extra_charge > 0 && ` + ${money(stay.extra_charge)} shtesë`}
         </dd>
 
+        <dt>Pagesa</dt>
+        <dd className={due > 0 ? "text-red" : ""}>{due > 0 ? `Pa paguar ${money(due)}` : "Paguar"}</dd>
+
         <dt>Regjistroi</dt>
         <dd>{stay.checked_in_by}</dd>
       </dl>
+
+      {/* The guest can pay at any moment during the stay */}
+      {due > 0 && (
+        <button className="btn blue big" style={{ marginTop: 14 }} disabled={busy} onClick={() => onStayAction({ action: "pay" })}>
+          Merr pagesën {money(due)}
+        </button>
+      )}
 
       {status === "overdue" ? (
         // Time is up: the worker checks the room and picks one of two outcomes

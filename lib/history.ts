@@ -16,6 +16,8 @@ export interface HistoryRow {
   base_price: number;
   extra_charge: number;
   total: number;
+  paid_amount: number;
+  due: number;
   currency: string;
   checked_in_by: string;
   checked_out_by: string | null;
@@ -27,6 +29,7 @@ export interface HistoryRow {
  *
  * `minutes` is the length of the stay so far for open stays.
  * `total` is 0 for cancelled stays so they don't count as revenue.
+ * `due` is what the guest still owes (0 when fully paid or cancelled).
  */
 export async function getHistory(from: string, to: string, room?: string): Promise<HistoryRow[]> {
   return query<HistoryRow>(
@@ -41,6 +44,9 @@ export async function getHistory(from: string, to: string, room?: string): Promi
             s.base_price,
             s.extra_charge,
             case when s.status = 'cancelled' then 0 else s.base_price + s.extra_charge end as total,
+            s.paid_amount,
+            case when s.status = 'cancelled' then 0
+                 else greatest(s.base_price + s.extra_charge - s.paid_amount, 0) end as due,
             s.currency,
             coalesce(nullif(user_in.full_name, ''), user_in.username)   as checked_in_by,
             coalesce(nullif(user_out.full_name, ''), user_out.username) as checked_out_by

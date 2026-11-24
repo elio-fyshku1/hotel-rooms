@@ -102,6 +102,13 @@ create table if not exists stays (
   checked_out_by int references users(id)
 );
 
+-- Payment. The guest can pay at check-in or at check-out, so each stay records
+-- how much was collected. Still to pay = base_price + extra_charge - paid_amount.
+-- Added with "add column if not exists" so existing databases get the columns too.
+alter table stays add column if not exists paid_amount numeric(10,2) not null default 0;
+alter table stays add column if not exists paid_at timestamptz;          -- when the last payment was taken
+alter table stays add column if not exists paid_by int references users(id); -- who took it
+
 -- A room can never have two open stays at the same time, even if two
 -- devices scan at the same moment.
 create unique index if not exists stays_one_open_per_room on stays(room_id) where status = 'open';

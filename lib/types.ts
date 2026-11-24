@@ -41,6 +41,8 @@ export interface Stay {
   base_price: number;
   extra_charge: number;
   currency: string;
+  paid_amount: number;
+  paid_at: Timestamp | null;
 }
 
 /** A room as shown on the dashboard, with its open stay (if any). */
@@ -56,7 +58,13 @@ export interface RoomView {
     expected_out: Timestamp;
     base_price: number;
     extra_charge: number;
+    paid_amount: number;
     checked_in_by: string;
+  };
+  // The room's last finished stay, if the guest left without paying all of it
+  unpaid: null | {
+    stay_id: number;
+    amount: number;
   };
 }
 
@@ -82,8 +90,9 @@ export type ScanResult =
   | { result: "checked_out"; room: string; stay: Stay }
   | { result: "confirm_checkout"; room: string; stay: Stay; overtimeMinutes: number; suggestedExtra: number };
 
-/** Actions a worker can take on an open stay from the room dialog. */
+/** Actions a worker can take on a stay ("pay" also works after check-out). */
 export type StayAction =
+  | { action: "pay" }
   | { action: "checkout"; extra?: number }
   | { action: "extend"; kind: "hour" | "block" }
   | { action: "set_type"; type: StayType }

@@ -247,7 +247,8 @@ export async function checkInWithoutCard(roomId: number, userId: number, type: S
 }
 
 /**
- * Applies a worker action to an open stay:
+ * Applies a worker action to a stay:
+ *   pay      - the guest paid everything still due (also after check-out)
  *   checkout - close it now, optionally with an extra charge
  *   extend   - guest stays longer: charge now and move the deadline
  *   set_type - switch between 2 hours and night (deadline counted from check-in)
@@ -263,6 +264,25 @@ export async function applyStayAction(
     const stayResult = await client.query<Stay>("select * from stays where id = $1 for update", [stayId]);
     const stay = stayResult.rows[0];
     if (!stay) throw new UserError("Qëndrimi nuk u gjet.");
+
+    // Payment is allowed on finished stays too: many guests pay when leaving
+    if (request.action === "pay") {
+      if (stay.status === "cancelled") throw new UserError("Ky qëndrim është anuluar.");
+      const due = stay.base_price + stay.extra_charge - stay.paid_amount;
+      if (due <= 0) return { stay };
+
+      const result = await client.query<Stay>(
+        `update stays
+            set paid_amount = base_price + extra_charge, paid_at = now(), paid_by = $2
+          where id = $1
+         returning *`,
+        [stayId, userId]
+      );
+      await logEvent(client, stayId, "payment", userId, due);
+      return { stay: result.rows[0] };
+    }
+
+    // Every other action changes the stay itself, so it must still be open
     if (stay.status !== "open") throw new UserError("Ky qëndrim është mbyllur tashmë.");
 
     const settings = await getSettings(client);
@@ -332,6 +352,9 @@ export async function applyStayAction(
 /**
  * All active rooms with their open stay, in display order:
  * by floor, then by room number as a number (so 9 comes before 10).
+ *
+ * "unpaid" is the room's last finished stay when the guest still owes money,
+ * so the worker is reminded to collect it (e.g. when the room is cleaned).
  */
 export async function listRooms(): Promise<RoomView[]> {
   return query<RoomView>(
@@ -343,11 +366,21 @@ export async function listRooms(): Promise<RoomView[]> {
               'expected_out', s.expected_out,
               'base_price', s.base_price,
               'extra_charge', s.extra_charge,
+              'paid_amount', s.paid_amount,
               'checked_in_by', coalesce(nullif(u.full_name, ''), u.username)
-            ) end as stay
+            ) end as stay,
+            case when last.due > 0 then json_build_object('stay_id', last.id, 'amount', last.due) end as unpaid
        from rooms r
        left join stays s on s.room_id = r.id and s.status = 'open'
        left join users u on u.id = s.checked_in_by
+       -- The room's most recent closed stay and how much of it is still unpaid
+       left join lateral (
+         select c.id, c.base_price + c.extra_charge - c.paid_amount as due
+           from stays c
+          where c.room_id = r.id and c.status = 'closed'
+          order by c.check_out desc
+          limit 1
+       ) last on true
       where r.active
       order by r.floor nulls last,
                nullif(regexp_replace(r.number, '\\D', '', 'g'), '')::bigint nulls last,

@@ -38,6 +38,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const validRows = rows.filter((row) => row.status !== "cancelled");
   const revenue = validRows.reduce((sum, row) => sum + row.total, 0);
   const extras = validRows.reduce((sum, row) => sum + row.extra_charge, 0);
+  const unpaid = validRows.reduce((sum, row) => sum + row.due, 0);
   const shortCount = validRows.filter((row) => row.stay_type === "short").length;
   const nightCount = validRows.length - shortCount;
   const cancelledCount = rows.length - validRows.length;
@@ -93,6 +94,8 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
             <div className="muted small">Të ardhura</div>
             <h2>{money(revenue)}</h2>
             <div className="muted small">nga të cilat shtesa {money(extras)}</div>
+            {/* Money still to collect from guests who haven't paid */}
+            {unpaid > 0 && <div className="small text-red">Pa arkëtuar: {money(unpaid)}</div>}
           </div>
           <div className="card">
             <div className="muted small">Sipas punëtorit (hyrje)</div>
@@ -121,6 +124,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
                 <th>Çmimi</th>
                 <th>Shtesë</th>
                 <th>Totali</th>
+                <th>Pagesa</th>
                 <th>Statusi</th>
                 <th>Punëtori</th>
               </tr>
@@ -136,6 +140,9 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
                   <td>{formatMoney(row.base_price, row.currency)}</td>
                   <td>{row.extra_charge > 0 ? formatMoney(row.extra_charge, row.currency) : "-"}</td>
                   <td><b>{formatMoney(row.total, row.currency)}</b></td>
+                  <td className={row.due > 0 ? "text-red" : ""}>
+                    {row.status === "cancelled" ? "-" : row.due > 0 ? `Pa paguar ${formatMoney(row.due, row.currency)}` : "Paguar"}
+                  </td>
                   <td><span className={`badge ${row.status}`}>{STATUS_LABELS[row.status]}</span></td>
                   <td className="small">
                     {row.checked_in_by}
@@ -145,7 +152,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="muted">Nuk ka qëndrime në këtë periudhë.</td>
+                  <td colSpan={11} className="muted">Nuk ka qëndrime në këtë periudhë.</td>
                 </tr>
               )}
             </tbody>

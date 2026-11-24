@@ -8,16 +8,19 @@
  * - Listens for the barcode scanner (useCardReader) and sends each scanned
  *   code to /api/scan, which checks the room in or out.
  * - Shows the dialogs and messages that follow from a scan or a tap on a room.
+ * - Asks about payment after every check-in, and at check-out when the guest
+ *   hasn't paid yet.
  */
 import { useCallback, useEffect, useState } from "react";
 import type { RoomView, ScanResult, Settings, Stay, StayAction, StayType } from "@/lib/types";
-import { formatDuration, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
+import { amountDue, formatDuration, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
 import { sendJson } from "@/components/apiClient";
 import { useCardReader, useWakeLock } from "./hooks";
 import RoomTile, { getRoomStatus } from "./RoomTile";
 import RoomDialog from "./RoomDialog";
 import LateCheckoutDialog, { LateCheckout } from "./LateCheckoutDialog";
 import Notice, { NoticeData } from "./Notice";
+import PaymentDialog, { PaymentRequest } from "./PaymentDialog";
 
 const REFRESH_INTERVAL_MS = 5000;
 const NOTICE_DURATION_MS = 9000;
@@ -44,6 +47,8 @@ export default function RoomBoard() {
   const [openRoomId, setOpenRoomId] = useState<number | null>(null);
   const [lateCheckout, setLateCheckout] = useState<LateCheckout | null>(null);
   const [dirtyRoomScan, setDirtyRoomScan] = useState<{ code: string; room: string } | null>(null);
+  // Open payment question, with the stay it belongs to (for the message shown afterwards)
+  const [payment, setPayment] = useState<{ request: PaymentRequest; stay: Stay } | null>(null);
   const [notice, setNotice] = useState<NoticeData | null>(null);
   const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -117,7 +122,9 @@ export default function RoomBoard() {
       text:
         `${stayTypeLabel(stay.stay_type, shortMinutes)} · ` +
         `${formatTime(stay.check_in, timezone)} deri ${formatTime(stay.expected_out, timezone)} · ` +
-        `Merr ${formatMoney(stay.base_price, stay.currency)}`,
+        (amountDue(stay) > 0
+          ? `Pa paguar ${formatMoney(amountDue(stay), stay.currency)} (paguan në dalje)`
+          : `Paguar ${formatMoney(stay.paid_amount, stay.currency)}`),
       actions: [
         {
           label: otherType === "night" ? "Ndrysho në natë" : `Ndrysho në ${stayTypeLabel("short", shortMinutes)}`,
@@ -144,8 +151,47 @@ export default function RoomBoard() {
 
     let text = `Qëndroi ${formatDuration(minutes)} · Totali ${formatMoney(total, stay.currency)}`;
     if (stay.extra_charge > 0) text += ` (shtesë ${formatMoney(stay.extra_charge, stay.currency)})`;
+    if (amountDue(stay) > 0) text += ` · PA PAGUAR ${formatMoney(amountDue(stay), stay.currency)}`;
 
     setNotice({ kind: "checkout", title: `Dhoma ${room} - DALJE`, text });
+  }
+
+  /** After a check-in: ask "Dëshironi të paguani tani?" before showing the message. */
+  function afterCheckIn(room: string, stay: Stay) {
+    if (amountDue(stay) === 0) {
+      showCheckedIn(room, stay);
+      return;
+    }
+    setPayment({ request: { stayId: stay.id, room, amount: amountDue(stay), moment: "checkin" }, stay });
+  }
+
+  /** After a check-out: if the guest still owes money, ask for it first. */
+  function afterCheckOut(room: string, stay: Stay) {
+    if (amountDue(stay) === 0) {
+      showCheckedOut(room, stay);
+      return;
+    }
+    setPayment({ request: { stayId: stay.id, room, amount: amountDue(stay), moment: "checkout" }, stay });
+  }
+
+  /**
+   * Answer to the payment question. "Yes" records the payment on the server;
+   * either way the usual check-in / check-out message follows.
+   */
+  async function answerPayment(paid: boolean) {
+    if (!payment) return;
+    const { request } = payment;
+    let stay = payment.stay;
+
+    if (paid) {
+      const result = await runStayAction(request.stayId, { action: "pay" });
+      if (!result) return; // error message already shown; the question stays open
+      stay = result.stay;
+    }
+
+    setPayment(null);
+    if (request.moment === "checkin") showCheckedIn(request.room, stay);
+    else showCheckedOut(request.room, stay);
   }
 
   /** Shows an error message. */
@@ -170,10 +216,10 @@ export default function RoomBoard() {
 
       switch (scan.result) {
         case "checked_in":
-          showCheckedIn(scan.room, scan.stay);
+          afterCheckIn(scan.room, scan.stay);
           break;
         case "checked_out":
-          showCheckedOut(scan.room, scan.stay);
+          afterCheckOut(scan.room, scan.stay);
           break;
         case "confirm_checkout":
           setLateCheckout({
@@ -228,8 +274,8 @@ export default function RoomBoard() {
     if (!lateCheckout) return;
     const result = await runStayAction(lateCheckout.stayId, { action: "checkout", extra });
     if (result) {
-      showCheckedOut(lateCheckout.room, result.stay);
       setLateCheckout(null);
+      afterCheckOut(lateCheckout.room, result.stay);
     }
   }
 
@@ -240,8 +286,10 @@ export default function RoomBoard() {
     if (!result) return;
 
     if (action.action === "checkout") {
-      showCheckedOut(room.number, result.stay);
       setOpenRoomId(null);
+      afterCheckOut(room.number, result.stay);
+    } else if (action.action === "pay") {
+      setNotice({ kind: "checkout", title: `Dhoma ${room.number} - pagesa u regjistrua` });
     } else if (action.action === "cancel") {
       setNotice({ kind: "warning", title: `Dhoma ${room.number} - hyrja u anulua` });
       setOpenRoomId(null);
@@ -255,12 +303,19 @@ export default function RoomBoard() {
       const result = await sendJson<{ stay: Stay }>(`/api/rooms/${room.id}/checkin`, { type });
       setOpenRoomId(null);
       await loadRooms();
-      showCheckedIn(room.number, result.stay);
+      afterCheckIn(room.number, result.stay);
     } catch (error) {
       showError("Gabim", (error as Error).message);
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Records the payment of the room's last stay (the guest paid after leaving). */
+  async function handlePayLastStay(room: RoomView) {
+    if (!room.unpaid) return;
+    const result = await runStayAction(room.unpaid.stay_id, { action: "pay" });
+    if (result) setNotice({ kind: "checkout", title: `Dhoma ${room.number} - pagesa u regjistrua` });
   }
 
   /** Marks a room as cleaned. */
@@ -276,7 +331,7 @@ export default function RoomBoard() {
 
   // Scanner input anywhere on the page (ignored while a dialog needs an answer)
   useCardReader((code) => {
-    if (!lateCheckout && !dirtyRoomScan) handleScan(code);
+    if (!lateCheckout && !dirtyRoomScan && !payment) handleScan(code);
   });
 
   // ---------------------------------------------------------------------------
@@ -390,6 +445,7 @@ export default function RoomBoard() {
           onClose={() => setOpenRoomId(null)}
           onCheckIn={(type) => handleCheckInWithoutCard(openRoom, type)}
           onMarkCleaned={() => handleMarkCleaned(openRoom)}
+          onPayLastStay={() => handlePayLastStay(openRoom)}
           onStayAction={(action) => handleRoomDialogAction(openRoom, action)}
         />
       )}
@@ -427,6 +483,17 @@ export default function RoomBoard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Payment question after a check-in, or at check-out when not paid yet */}
+      {payment && (
+        <PaymentDialog
+          request={payment.request}
+          currency={payment.stay.currency}
+          busy={busy}
+          onPay={() => answerPayment(true)}
+          onLater={() => answerPayment(false)}
+        />
       )}
 
       {notice && <Notice notice={notice} onClose={() => setNotice(null)} />}

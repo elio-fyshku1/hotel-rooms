@@ -3,9 +3,10 @@
  * One room on the board. Colour comes from its status (getRoomStatus below and
  * the .room.* classes in globals.css). Occupied rooms show the check-in time,
  * the deadline and a live countdown; once the time is up it counts upwards.
+ * A "Pa paguar" label shows when the guest (current or last) still owes money.
  */
 import type { RoomView, Settings } from "@/lib/types";
-import { formatCountdown, formatTime, stayTypeLabel } from "@/lib/format";
+import { amountDue, formatCountdown, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
 
 export type RoomStatus =
   | "free"      // green: no guest, ready
@@ -51,6 +52,9 @@ export default function RoomTile({ room, status, now, settings, onOpen }: RoomTi
   const stay = room.stay;
   const remaining = stay ? new Date(stay.expected_out).getTime() - now : 0;
 
+  // Unpaid: the current guest hasn't paid yet, or the last guest left without paying
+  const unpaidAmount = stay ? amountDue(stay) : room.unpaid?.amount ?? 0;
+
   return (
     <button type="button" className={`room ${status}`} onClick={onOpen}>
       <span className="room-number">{room.number}</span>
@@ -68,6 +72,10 @@ export default function RoomTile({ room, status, now, settings, onOpen }: RoomTi
             {remaining > 0 ? formatCountdown(remaining) : `+${formatCountdown(-remaining)}`}
           </span>
         </>
+      )}
+
+      {unpaidAmount > 0 && (
+        <span className="room-unpaid">Pa paguar {formatMoney(unpaidAmount, settings.currency)}</span>
       )}
     </button>
   );

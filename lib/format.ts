@@ -62,3 +62,8 @@ export function stayTypeLabel(type: "short" | "night", shortMinutes = 120): stri
   if (type === "night") return "Natë";
   return shortMinutes % 60 === 0 ? `${shortMinutes / 60} orë` : `${shortMinutes} min`;
 }
+
+/** What a guest still has to pay for a stay (never negative). */
+export function amountDue(stay: { base_price: number; extra_charge: number; paid_amount: number }): number {
+  return Math.max(stay.base_price + stay.extra_charge - stay.paid_amount, 0);
+}
