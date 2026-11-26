@@ -2,8 +2,10 @@
 /**
  * Dialog opened by tapping a room. What it offers depends on the room:
  *
- *   free / cleaning  -> collect an unpaid last stay, mark as cleaned,
- *                       or check in without a card (one button per package)
+ *   free             -> collect an unpaid last stay, or check in without a
+ *                       card (one button per package)
+ *   cleaning         -> collect an unpaid last stay, mark as cleaned
+ *                       (no check-in: the room can't be given before it is cleaned)
  *   occupied         -> take payment, check out, +1 hour, change package, cancel
  *   overdue          -> "guest left" (check out, no extra) or charge extra
  *
@@ -54,7 +56,7 @@ export default function RoomDialog(props: RoomDialogProps) {
 
 /** Free or waiting-for-cleaning room. */
 function FreeRoomContent(props: RoomDialogProps) {
-  const { room, status, settings, packages, nightNow, busy, onCheckIn, onMarkCleaned, onPayLastStay } = props;
+  const { room, status, busy, onMarkCleaned, onPayLastStay } = props;
   return (
     <div className="stack">
       {/* The last guest left without paying: ask for the money first */}
@@ -69,12 +71,23 @@ function FreeRoomContent(props: RoomDialogProps) {
         </>
       )}
 
+      {/* Waiting for cleaning: that is the only thing to do with the room now */}
       {status === "cleaning" && (
         <button className="btn amber big" disabled={busy} onClick={onMarkCleaned}>
           Shëno si të pastruar
         </button>
       )}
 
+      {/* Check-in without a card, only once the room is clean */}
+      {status === "free" && <CheckInButtons {...props} />}
+    </div>
+  );
+}
+
+/** One button per package, for when the card can't be read. */
+function CheckInButtons({ settings, packages, nightNow, busy, onCheckIn }: RoomDialogProps) {
+  return (
+    <>
       <p className="muted small no-margin">
         Zakonisht mjafton të afrosh kartën te lexuesi. Përdori butonat më poshtë vetëm kur karta nuk lexohet.
       </p>
@@ -92,7 +105,7 @@ function FreeRoomContent(props: RoomDialogProps) {
           </button>
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
