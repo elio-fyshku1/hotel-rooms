@@ -93,11 +93,14 @@ create table if not exists packages (
 
 -- First run with packages: create the hotel's price list. Older versions had
 -- one price for "2 hours" and one for the night, in euro, so the currency and
--- the overtime price switch to lekë at the same moment. Runs only once (while
--- the table is empty); after that prices are changed in Administrimi.
+-- the overtime price switch to lekë at the same moment.
+-- Runs only once, ever: packages_seeded remembers it, so an admin who deletes
+-- every package doesn't get the defaults (and lekë) back on the next update.
+alter table settings add column if not exists packages_seeded boolean not null default false;
+update settings set packages_seeded = true where exists (select 1 from packages);
 do $$
 begin
-  if not exists (select 1 from packages) then
+  if not (select packages_seeded from settings where id = 1) then
     insert into packages (name, minutes, price, sort) values
       ('2 orë',   120,  2000, 1),
       ('3 orë',   180,  2500, 2),
@@ -105,7 +108,7 @@ begin
       ('5 orë',   300,  3500, 4),
       ('24 orë',  1440, 4000, 5),
       ('Natë',    null, 3500, 6);
-    update settings set currency = 'ALL', extra_hour_price = 500 where id = 1;
+    update settings set currency = 'ALL', extra_hour_price = 500, packages_seeded = true where id = 1;
   end if;
 end $$;
 

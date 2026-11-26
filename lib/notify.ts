@@ -19,6 +19,7 @@ interface MailSettings {
   notify_logins: boolean;
 }
 
+/** Reads the mail settings fresh each time, so changes in Administrimi apply at once. */
 async function getMailSettings(): Promise<MailSettings> {
   const rows = await query<MailSettings>(
     `select hotel_name, timezone, notify_email, smtp_user, smtp_password, notify_logins

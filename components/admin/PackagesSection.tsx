@@ -67,6 +67,7 @@ export default function PackagesSection({ packages, settings, runChange }: Packa
           </thead>
           <tbody>
             {packages.map((pkg) => (
+              // The key includes the saved values, so a row resets its form after the page reloads the data
               <PackageRow key={`${pkg.id}-${pkg.name}-${pkg.price}-${pkg.minutes}-${pkg.active}`} pkg={pkg} runChange={runChange} />
             ))}
             <tr>
