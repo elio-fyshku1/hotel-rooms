@@ -16,7 +16,7 @@ export const POST = withErrorHandling(
     const { id } = await context.params;
     const action = await request.json();
 
-    const result = await applyStayAction(Number(id), user.id, action);
+    const result = await applyStayAction(Number(id), user.id, user.role === "admin", action);
     return NextResponse.json(result);
   }
 );

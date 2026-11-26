@@ -15,6 +15,10 @@ import type { Package, RoomView, ScanResult, Settings, Stay, StayAction, Timesta
 // check-in (or check-out) that just happened.
 const DOUBLE_SCAN_SECONDS = 20;
 
+// Workers can cancel a mistaken check-in only shortly after it was made.
+// Admins can cancel at any time.
+const WORKER_CANCEL_MINUTES = 10;
+
 
 // -----------------------------------------------------------------------------
 // Settings, packages and overtime
@@ -288,12 +292,12 @@ export async function checkInWithoutCard(roomId: number, userId: number, package
  *   extend_hour  - guest stays one hour longer at the overtime price
  *   set_package  - switch to another package, e.g. 2 -> 3 hours (new price,
  *                  deadline counted from check-in; what was paid is kept)
- *   cancel       - undo a mistaken check-in (any user, at any time; the stay
- *                  stays in the history as "anuluar" with who cancelled it)
+ *   cancel       - undo a mistaken check-in
  */
 export async function applyStayAction(
   stayId: number,
   userId: number,
+  isAdmin: boolean,
   request: StayAction
 ): Promise<{ stay: Stay }> {
   return transaction(async (client) => {
@@ -361,6 +365,10 @@ export async function applyStayAction(
       }
 
       case "cancel": {
+        const minutesSinceCheckIn = secondsSince(stay.check_in) / 60;
+        if (!isAdmin && minutesSinceCheckIn > WORKER_CANCEL_MINUTES) {
+          throw new UserError(`Pas ${WORKER_CANCEL_MINUTES} minutash hyrjen mund ta anulojë vetëm administratori.`);
+        }
         const result = await client.query<Stay>(
           `update stays
               set status = 'cancelled', check_out = now(), checked_out_by = $2
