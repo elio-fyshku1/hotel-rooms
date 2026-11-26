@@ -1,10 +1,10 @@
 # Hotel Room Tracker
 
-Internal web app for a hotel/motel that rents rooms for short stays (2 hours) and for the night.
+Internal web app for a hotel/motel that rents rooms by the hour (2, 3, 4, 5 hours), for 24 hours or for the night.
 
 Each room key card has a barcode sticker on the back. Reception scans the card with a USB barcode scanner:
 
-- **first scan** (room free) → check-in: room, date and entry time are saved automatically
+- **first scan** (room free) → the worker picks the package, then check-in: room, date and entry time are saved automatically
 - **next scan** (room occupied) → check-out: leaving time is saved
 
 The room board shows every room live: **green** = free, **red** = occupied, **yellow** = waiting for cleaning. When a guest's time is up, the room **pulses and shakes** until a worker deals with it.
@@ -17,15 +17,23 @@ Interface language: Albanian.
 ## Daily workflow
 
 1. A guest asks for a room. The worker takes the card of a **green** room and scans the barcode before handing it over.
-2. The app creates the stay:
-   - from 21:00 to 06:00 → **night** stay (40 €, leave by 12:00)
-   - otherwise → **2 hours** (20 €)
+2. The app asks for the package, each button showing its price and when the time ends:
 
-   A message confirms the room, times and price, with **"Ndrysho në natë"** (switch to night) and **"Anulo"** (undo) buttons.
+   | Package | Price | Countdown |
+   |---|---|---|
+   | 2 orë | 2000 Lekë | 2 hours from check-in |
+   | 3 orë | 2500 Lekë | 3 hours |
+   | 4 orë | 3000 Lekë | 4 hours |
+   | 5 orë | 3500 Lekë | 5 hours |
+   | 24 orë | 4000 Lekë | 24 hours |
+   | Natë | 3500 Lekë | until 12:00 the next morning |
+
+   From 21:00 to 06:00 the night package is highlighted. The stay starts when the package is chosen,
+   then the app asks **"Dëshironi të paguani tani?"**. Prices, names and packages are changed in Administrimi → Paketat dhe çmimet.
 3. When the time is up, the room pulses on the board and a red banner names it. The worker goes to check the room.
 4. Guests usually pay up front and often leave the card in the room:
    - **room empty** → take the card and scan it (or tap the room → "Klienti u largua"): check-out, **no extra charge** by default;
-   - **guest still inside** → tap the room → +1 hour / +2 hours / night, or check out with an extra amount.
+   - **guest still inside** → tap the room → +1 hour (500 Lekë), switch to another package (e.g. 2 → 4 hours: new price, time counted from check-in), or check out with an extra amount.
 5. After check-out the room turns yellow until someone taps "Shëno si të pastruar" (this step can be turned off).
 
 Other rules:
@@ -40,7 +48,7 @@ Other rules:
 |---|---|---|
 | `/` | everyone | Room board, scan field, room dialogs |
 | `/history` | everyone | Stays by period/room, totals, per worker; CSV export for admins |
-| `/admin` | admin | Key cards, rooms, prices and rules, users |
+| `/admin` | admin | Key cards, rooms, packages and prices, rules, users |
 | `/admin/labels` | admin | Printable barcode labels |
 
 ---
@@ -122,14 +130,13 @@ everything and creates the tables.
 
 | Setting | Default |
 |---|---|
-| Short stay price / length | 20 € / 120 min |
-| Night price | 40 € |
-| Night window (check-ins become "night") | 21:00 - 06:00 |
+| Packages and prices | see the table in "Daily workflow" (Administrimi → Paketat dhe çmimet) |
+| Night window (night package suggested) | 21:00 - 06:00 |
 | Night guests leave by | 12:00 |
-| Extra per started overtime hour | 10 € |
+| Extra per started overtime hour | 500 Lekë |
 | Grace period before an extra is suggested | 10 min |
 | Cleaning step after check-out | on |
-| Currency / timezone | EUR / Europe/Tirane |
+| Currency / timezone | ALL (Lekë) / Europe/Tirane |
 
 ---
 

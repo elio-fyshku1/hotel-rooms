@@ -346,3 +346,10 @@ th { color: var(--muted); font-weight: 600; }
   .container { max-width: none; padding: 0; }
   .label { border-color: #ccc; }
 }
+
+/* ---------- Package chooser (check-in) ---------- */
+.package-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+.btn.package { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 8px; white-space: normal; }
+.package-name { font-size: 20px; font-weight: 800; }
+.package-price { font-size: 17px; font-weight: 700; }
+.package-detail { font-size: 12px; opacity: 0.8; }

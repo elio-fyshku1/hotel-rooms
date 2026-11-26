@@ -1,5 +1,5 @@
 /**
- * Hotel logic: settings, check-in, check-out and changes to an open stay.
+ * Hotel logic: settings, packages, check-in, check-out and changes to an open stay.
  *
  * All functions that change data run inside a transaction and lock the room
  * row first, so two devices acting on the same room at the same moment are
@@ -8,7 +8,7 @@
 import type { PoolClient } from "pg";
 import { pool, query, transaction, Queryable } from "./db";
 import { UserError } from "./errors";
-import type { RoomView, ScanResult, Settings, Stay, StayAction, StayType, Timestamp } from "./types";
+import type { Package, RoomView, ScanResult, Settings, Stay, StayAction, Timestamp } from "./types";
 
 // Readers sometimes register the same card twice in a row. A second read of
 // the same room within this many seconds is ignored instead of undoing the
@@ -21,17 +21,16 @@ const WORKER_CANCEL_MINUTES = 10;
 
 
 // -----------------------------------------------------------------------------
-// Settings and overtime
+// Settings, packages and overtime
 // -----------------------------------------------------------------------------
 
 /**
- * Loads the settings row (prices, time rules, timezone). Times are formatted
+ * Loads the settings row (time rules, overtime, timezone). Times are formatted
  * as "HH:MM" so they can go straight into <input type="time"> fields.
  */
 export async function getSettings(db: Queryable = pool): Promise<Settings> {
   const rows = await query<Settings>(
     `select hotel_name, currency, timezone,
-            short_price, short_minutes, night_price,
             to_char(night_start, 'HH24:MI')    as night_start,
             to_char(night_end, 'HH24:MI')      as night_end,
             to_char(night_checkout, 'HH24:MI') as night_checkout,
@@ -42,6 +41,26 @@ export async function getSettings(db: Queryable = pool): Promise<Settings> {
     db
   );
   return rows[0];
+}
+
+/**
+ * The packages in the order they are shown (2 hours first, night last).
+ * Reception only sees the active ones; Administrimi sees all of them.
+ */
+export async function listPackages(onlyActive: boolean): Promise<Package[]> {
+  return query<Package>(
+    `select id, name, minutes, price, sort, active
+       from packages
+      where active or not $1
+      order by sort, id`,
+    [onlyActive]
+  );
+}
+
+/** True when it is night time at the hotel now, to suggest the night package. */
+export async function isNightNow(): Promise<boolean> {
+  const rows = await query<{ night: boolean }>("select auto_stay_type(now()) = 'night' as night");
+  return rows[0].night;
 }
 
 /**
@@ -101,31 +120,32 @@ function secondsSince(moment: Date | string): number {
 }
 
 /**
- * Creates a new stay. When `type` is null the type is chosen from the clock
- * (night window or not). Expected checkout time and price come from the
- * database functions in schema.sql.
+ * Creates a new stay with the chosen package: its name and price are copied
+ * into the stay and the deadline is counted from now (stay_end in schema.sql).
  */
 async function insertStay(
   client: PoolClient,
   roomId: number,
   cardId: number | null,
   userId: number,
-  type: StayType | null
+  packageId: number
 ): Promise<Stay> {
   const result = await client.query<Stay>(
-    `insert into stays (room_id, card_id, stay_type, expected_out, base_price, currency, checked_in_by)
-     select $1, $2, chosen.stay_type, stay_expected_out(chosen.stay_type, now()), stay_price(chosen.stay_type), s.currency, $3
-       from settings s,
-            lateral (select coalesce($4::text, auto_stay_type(now())) as stay_type) chosen
-      where s.id = 1
+    `insert into stays (room_id, card_id, stay_type, package_name, expected_out, base_price, currency, checked_in_by)
+     select $1, $2,
+            case when p.minutes is null then 'night' else 'short' end,
+            p.name, stay_end(p.minutes, now()), p.price, s.currency, $3
+       from packages p, settings s
+      where p.id = $4 and p.active and s.id = 1
      returning *`,
-    [roomId, cardId, userId, type]
+    [roomId, cardId, userId, packageId]
   );
   const stay = result.rows[0];
+  if (!stay) throw new UserError("Kjo paketë nuk ekziston më. Rifreskoni faqen.");
 
   // A new guest means the room is in use, whatever its cleaning flag was.
   await client.query("update rooms set needs_cleaning = false where id = $1", [roomId]);
-  await logEvent(client, stay.id, "check_in", userId, stay.base_price, stay.stay_type);
+  await logEvent(client, stay.id, "check_in", userId, stay.base_price, stay.package_name);
   return stay;
 }
 
@@ -161,7 +181,10 @@ async function closeStay(client: PoolClient, stay: Stay, userId: number, extra: 
 
 /**
  * Handles a card presented to the reader. The card works as a toggle:
- *   - its room is free     -> check-in
+ *   - its room is free     -> check-in, in two steps:
+ *       1. scan without a package: answers "choose_package" (nothing saved yet)
+ *       2. the worker picks the package and the browser sends the same code
+ *          again with `packageId`: the stay starts now
  *   - its room is occupied -> check-out
  *
  * A late check-out (past the grace period) is not closed here: the result
@@ -170,7 +193,12 @@ async function closeStay(client: PoolClient, stay: Stay, userId: number, extra: 
  * `allowDirty` is set when the worker confirmed checking in to a room that
  * was not marked as cleaned.
  */
-export async function scanCard(rawCode: string, userId: number, allowDirty = false): Promise<ScanResult> {
+export async function scanCard(
+  rawCode: string,
+  userId: number,
+  allowDirty = false,
+  packageId: number | null = null
+): Promise<ScanResult> {
   const code = rawCode.trim().toUpperCase();
 
   return transaction(async (client) => {
@@ -194,6 +222,12 @@ export async function scanCard(rawCode: string, userId: number, allowDirty = fal
 
     // --- Room is occupied: this is a check-out ---
     if (openStay) {
+      // Step 2 of a check-in, but another device checked the room in meanwhile:
+      // never turn the chosen package into a check-out of that guest
+      if (packageId !== null) {
+        throw new UserError(`Dhoma ${card.number} u regjistrua ndërkohë nga dikush tjetër.`);
+      }
+
       if (secondsSince(openStay.check_in) < DOUBLE_SCAN_SECONDS) {
         return { result: "double_scan", room: card.number };
       }
@@ -215,7 +249,13 @@ export async function scanCard(rawCode: string, userId: number, allowDirty = fal
 
     // --- Room is free: this is a check-in ---
 
-    // Ignore a second read right after a check-out of the same room
+    // Step 2: package chosen (the checks below were done in step 1)
+    if (packageId !== null) {
+      const newStay = await insertStay(client, card.room_id, card.id, userId, packageId);
+      return { result: "checked_in", room: card.number, stay: newStay };
+    }
+
+    // Step 1. Ignore a second read right after a check-out of the same room
     const lastCheckout = await client.query(
       "select check_out from stays where room_id = $1 and status = 'closed' order by check_out desc limit 1",
       [card.room_id]
@@ -228,31 +268,31 @@ export async function scanCard(rawCode: string, userId: number, allowDirty = fal
       return { result: "needs_cleaning", room: card.number };
     }
 
-    const newStay = await insertStay(client, card.room_id, card.id, userId, null);
-    return { result: "checked_in", room: card.number, stay: newStay };
+    return { result: "choose_package", room: card.number, code };
   });
 }
 
 /**
  * Check-in from the room dialog, without a card (e.g. the card can't be read).
  */
-export async function checkInWithoutCard(roomId: number, userId: number, type: StayType | null): Promise<Stay> {
+export async function checkInWithoutCard(roomId: number, userId: number, packageId: number): Promise<Stay> {
   return transaction(async (client) => {
     await lockRoom(client, roomId);
     if (await findOpenStay(client, roomId)) {
       throw new UserError("Dhoma është e zënë.");
     }
-    return insertStay(client, roomId, null, userId, type);
+    return insertStay(client, roomId, null, userId, packageId);
   });
 }
 
 /**
  * Applies a worker action to a stay:
- *   pay      - the guest paid everything still due (also after check-out)
- *   checkout - close it now, optionally with an extra charge
- *   extend   - guest stays longer: charge now and move the deadline
- *   set_type - switch between 2 hours and night (deadline counted from check-in)
- *   cancel   - undo a mistaken check-in
+ *   pay          - the guest paid everything still due (also after check-out)
+ *   checkout     - close it now, optionally with an extra charge
+ *   extend_hour  - guest stays one hour longer at the overtime price
+ *   set_package  - switch to another package, e.g. 2 -> 3 hours (new price,
+ *                  deadline counted from check-in; what was paid is kept)
+ *   cancel       - undo a mistaken check-in
  */
 export async function applyStayAction(
   stayId: number,
@@ -293,37 +333,34 @@ export async function applyStayAction(
         return { stay: await closeStay(client, stay, userId, extra) };
       }
 
-      case "extend": {
-        // +1 hour at the overtime price, or one more short block at the short price
-        const minutes = request.kind === "hour" ? 60 : settings.short_minutes;
-        const amount = request.kind === "hour" ? settings.extra_hour_price : settings.short_price;
-
+      case "extend_hour": {
+        const amount = settings.extra_hour_price;
         const result = await client.query<Stay>(
           `update stays
-              set expected_out = expected_out + make_interval(mins => $2),
-                  extra_charge = extra_charge + $3
+              set expected_out = expected_out + interval '1 hour',
+                  extra_charge = extra_charge + $2
             where id = $1
            returning *`,
-          [stayId, minutes, amount]
+          [stayId, amount]
         );
-        await logEvent(client, stayId, request.kind === "hour" ? "extend_hour" : "extend_block", userId, amount);
+        await logEvent(client, stayId, "extend_hour", userId, amount);
         return { stay: result.rows[0] };
       }
 
-      case "set_type": {
-        if (request.type !== "short" && request.type !== "night") {
-          throw new UserError("Lloj i panjohur qëndrimi.");
-        }
+      case "set_package": {
         const result = await client.query<Stay>(
-          `update stays
-              set stay_type = $2,
-                  base_price = stay_price($2),
-                  expected_out = stay_expected_out($2, check_in)
-            where id = $1
-           returning *`,
-          [stayId, request.type]
+          `update stays s
+              set stay_type = case when p.minutes is null then 'night' else 'short' end,
+                  package_name = p.name,
+                  base_price = p.price,
+                  expected_out = stay_end(p.minutes, s.check_in)
+             from packages p
+            where s.id = $1 and p.id = $2 and p.active
+           returning s.*`,
+          [stayId, Number(request.packageId)]
         );
-        await logEvent(client, stayId, "set_type", userId, result.rows[0].base_price, request.type);
+        if (!result.rows[0]) throw new UserError("Kjo paketë nuk ekziston më. Rifreskoni faqen.");
+        await logEvent(client, stayId, "set_package", userId, result.rows[0].base_price, result.rows[0].package_name);
         return { stay: result.rows[0] };
       }
 
@@ -362,20 +399,22 @@ export async function listRooms(): Promise<RoomView[]> {
             case when s.id is null then null else json_build_object(
               'id', s.id,
               'stay_type', s.stay_type,
+              'package_name', s.package_name,
               'check_in', s.check_in,
               'expected_out', s.expected_out,
               'base_price', s.base_price,
               'extra_charge', s.extra_charge,
               'paid_amount', s.paid_amount,
+              'currency', s.currency,
               'checked_in_by', coalesce(nullif(u.full_name, ''), u.username)
             ) end as stay,
-            case when last.due > 0 then json_build_object('stay_id', last.id, 'amount', last.due) end as unpaid
+            case when last.due > 0 then json_build_object('stay_id', last.id, 'amount', last.due, 'currency', last.currency) end as unpaid
        from rooms r
        left join stays s on s.room_id = r.id and s.status = 'open'
        left join users u on u.id = s.checked_in_by
        -- The room's most recent closed stay and how much of it is still unpaid
        left join lateral (
-         select c.id, c.base_price + c.extra_charge - c.paid_amount as due
+         select c.id, c.currency, c.base_price + c.extra_charge - c.paid_amount as due
            from stays c
           where c.room_id = r.id and c.status = 'closed'
           order by c.check_out desc

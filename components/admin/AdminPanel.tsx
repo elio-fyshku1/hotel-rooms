@@ -5,8 +5,9 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Settings } from "@/lib/types";
+import type { Package, Settings } from "@/lib/types";
 import SettingsSection from "./SettingsSection";
+import PackagesSection from "./PackagesSection";
 import RoomsSection from "./RoomsSection";
 import CardsSection from "./CardsSection";
 import UsersSection from "./UsersSection";
@@ -45,13 +46,14 @@ export type RunChange = (change: () => Promise<unknown>, successMessage: string)
 interface AdminPanelProps {
   currentUserId: number;
   settings: Settings;
+  packages: Package[];
   rooms: AdminRoom[];
   cards: AdminCard[];
   users: AdminUser[];
 }
 
-/** Message area plus the four admin sections. */
-export default function AdminPanel({ currentUserId, settings, rooms, cards, users }: AdminPanelProps) {
+/** Message area plus the admin sections. */
+export default function AdminPanel({ currentUserId, settings, packages, rooms, cards, users }: AdminPanelProps) {
   const router = useRouter();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -80,6 +82,7 @@ export default function AdminPanel({ currentUserId, settings, rooms, cards, user
       {/* Cards first: printing labels is the most common admin task */}
       <CardsSection rooms={rooms} cards={cards} runChange={runChange} />
       <RoomsSection rooms={rooms} runChange={runChange} />
+      <PackagesSection packages={packages} settings={settings} runChange={runChange} />
       <SettingsSection settings={settings} runChange={runChange} />
       <UsersSection users={users} currentUserId={currentUserId} runChange={runChange} />
     </div>

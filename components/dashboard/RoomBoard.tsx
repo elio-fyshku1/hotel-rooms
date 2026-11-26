@@ -6,14 +6,16 @@
  *   several devices at reception stay in sync.
  * - Ticks every second to update the countdowns.
  * - Listens for the barcode scanner (useCardReader) and sends each scanned
- *   code to /api/scan, which checks the room in or out.
+ *   code to /api/scan. An occupied room is checked out; for a free room the
+ *   worker first picks the package (2-5 hours, 24 hours, night), then the
+ *   room is checked in and its countdown starts from that package.
  * - Shows the dialogs and messages that follow from a scan or a tap on a room.
  * - Asks about payment after every check-in, and at check-out when the guest
  *   hasn't paid yet.
  */
 import { useCallback, useEffect, useState } from "react";
-import type { RoomView, ScanResult, Settings, Stay, StayAction, StayType } from "@/lib/types";
-import { amountDue, formatDuration, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
+import type { Package, RoomView, ScanResult, Settings, Stay, StayAction } from "@/lib/types";
+import { amountDue, formatDuration, formatMoney, formatTime } from "@/lib/format";
 import { sendJson } from "@/components/apiClient";
 import { useCardReader, useWakeLock } from "./hooks";
 import RoomTile, { getRoomStatus } from "./RoomTile";
@@ -21,6 +23,7 @@ import RoomDialog from "./RoomDialog";
 import LateCheckoutDialog, { LateCheckout } from "./LateCheckoutDialog";
 import Notice, { NoticeData } from "./Notice";
 import PaymentDialog, { PaymentRequest } from "./PaymentDialog";
+import PackageDialog, { PackageRequest } from "./PackageDialog";
 
 const REFRESH_INTERVAL_MS = 5000;
 const NOTICE_DURATION_MS = 9000;
@@ -28,8 +31,17 @@ const NOTICE_DURATION_MS = 9000;
 interface BoardData {
   serverTime: string;
   settings: Settings;
+  packages: Package[];
+  nightNow: boolean; // night window: the night package is suggested
   rooms: RoomView[];
 }
+
+/**
+ * Open package question. What happens after the choice depends on how it
+ * was started: a scanned card (code) or switching the package of a guest
+ * already inside (stayId). The room dialog lists the packages itself.
+ */
+type PackageQuestion = PackageRequest & { code?: string; stayId?: number };
 
 /** Room board with its data, timers, scanner handling and dialogs. */
 export default function RoomBoard() {
@@ -47,6 +59,7 @@ export default function RoomBoard() {
   const [openRoomId, setOpenRoomId] = useState<number | null>(null);
   const [lateCheckout, setLateCheckout] = useState<LateCheckout | null>(null);
   const [dirtyRoomScan, setDirtyRoomScan] = useState<{ code: string; room: string } | null>(null);
+  const [packageQuestion, setPackageQuestion] = useState<PackageQuestion | null>(null);
   // Open payment question, with the stay it belongs to (for the message shown afterwards)
   const [payment, setPayment] = useState<{ request: PaymentRequest; stay: Stay } | null>(null);
   const [notice, setNotice] = useState<NoticeData | null>(null);
@@ -110,29 +123,22 @@ export default function RoomBoard() {
 
   const settings = data?.settings;
   const timezone = settings?.timezone ?? "Europe/Tirane";
-  const shortMinutes = settings?.short_minutes ?? 120;
 
-  /** Shows the check-in message, with buttons to switch the stay type or undo. */
+  /**
+   * Shows the check-in message with an undo button. (To switch to another
+   * package later: tap the room -> "Ndrysho paketën".)
+   */
   function showCheckedIn(room: string, stay: Stay) {
-    const otherType: StayType = stay.stay_type === "short" ? "night" : "short";
-
     setNotice({
       kind: "checkin",
       title: `Dhoma ${room} - HYRJE`,
       text:
-        `${stayTypeLabel(stay.stay_type, shortMinutes)} · ` +
+        `${stay.package_name} · ` +
         `${formatTime(stay.check_in, timezone)} deri ${formatTime(stay.expected_out, timezone)} · ` +
         (amountDue(stay) > 0
           ? `Pa paguar ${formatMoney(amountDue(stay), stay.currency)} (paguan në dalje)`
           : `Paguar ${formatMoney(stay.paid_amount, stay.currency)}`),
       actions: [
-        {
-          label: otherType === "night" ? "Ndrysho në natë" : `Ndrysho në ${stayTypeLabel("short", shortMinutes)}`,
-          run: async () => {
-            const result = await runStayAction(stay.id, { action: "set_type", type: otherType });
-            if (result) showCheckedIn(room, result.stay);
-          },
-        },
         {
           label: "Anulo",
           run: async () => {
@@ -205,16 +211,20 @@ export default function RoomBoard() {
 
   /**
    * Sends a scanned code to the server and reacts to the result.
-   * `allowDirty` confirms a check-in to a room not marked as cleaned.
+   * `allowDirty` confirms a check-in to a room not marked as cleaned;
+   * `packageId` is the second step of a check-in, after the package was chosen.
    */
-  async function handleScan(code: string, allowDirty = false) {
+  async function handleScan(code: string, allowDirty = false, packageId?: number) {
     if (!code.trim() || busy) return;
     setBusy(true);
 
     try {
-      const scan = await sendJson<ScanResult>("/api/scan", { code, allowDirty });
+      const scan = await sendJson<ScanResult>("/api/scan", { code, allowDirty, packageId });
 
       switch (scan.result) {
+        case "choose_package":
+          setPackageQuestion({ room: scan.room, mode: "checkin", code: scan.code, startsAt: now });
+          break;
         case "checked_in":
           afterCheckIn(scan.room, scan.stay);
           break;
@@ -296,11 +306,11 @@ export default function RoomBoard() {
     }
   }
 
-  /** Check-in from the room dialog without a card. */
-  async function handleCheckInWithoutCard(room: RoomView, type: StayType) {
+  /** Check-in from the room dialog without a card, with the chosen package. */
+  async function handleCheckInWithoutCard(room: RoomView, packageId: number) {
     setBusy(true);
     try {
-      const result = await sendJson<{ stay: Stay }>(`/api/rooms/${room.id}/checkin`, { type });
+      const result = await sendJson<{ stay: Stay }>(`/api/rooms/${room.id}/checkin`, { packageId });
       setOpenRoomId(null);
       await loadRooms();
       afterCheckIn(room.number, result.stay);
@@ -308,6 +318,32 @@ export default function RoomBoard() {
       showError("Gabim", (error as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * The worker picked a package in the package dialog: check in the scanned
+   * card, or switch the package of the guest inside.
+   */
+  async function handlePackageChosen(pkg: Package) {
+    if (!packageQuestion) return;
+    const question = packageQuestion;
+    setPackageQuestion(null);
+
+    if (question.code) {
+      // The cleaning question (if any) was already answered before the package
+      await handleScan(question.code, true, pkg.id);
+    } else if (question.stayId) {
+      const result = await runStayAction(question.stayId, { action: "set_package", packageId: pkg.id });
+      if (!result) return;
+      const due = amountDue(result.stay);
+      setNotice({
+        kind: "checkin",
+        title: `Dhoma ${question.room} - ${result.stay.package_name}`,
+        text:
+          `Deri ${formatTime(result.stay.expected_out, timezone)} · ` +
+          (due > 0 ? `Pa paguar ${formatMoney(due, result.stay.currency)}` : "Paguar"),
+      });
     }
   }
 
@@ -331,7 +367,7 @@ export default function RoomBoard() {
 
   // Scanner input anywhere on the page (ignored while a dialog needs an answer)
   useCardReader((code) => {
-    if (!lateCheckout && !dirtyRoomScan && !payment) handleScan(code);
+    if (!lateCheckout && !dirtyRoomScan && !payment && !packageQuestion) handleScan(code);
   });
 
   // ---------------------------------------------------------------------------
@@ -443,7 +479,19 @@ export default function RoomBoard() {
           settings={settings}
           busy={busy}
           onClose={() => setOpenRoomId(null)}
-          onCheckIn={(type) => handleCheckInWithoutCard(openRoom, type)}
+          packages={data.packages}
+          nightNow={data.nightNow}
+          onCheckIn={(pkg) => handleCheckInWithoutCard(openRoom, pkg.id)}
+          onChangePackage={() => {
+            setOpenRoomId(null);
+            setPackageQuestion({
+              room: openRoom.number,
+              mode: "change",
+              currentPackage: openRoom.stay?.package_name,
+              stayId: openRoom.stay?.id,
+              startsAt: openRoom.stay ? new Date(openRoom.stay.check_in).getTime() : now,
+            });
+          }}
           onMarkCleaned={() => handleMarkCleaned(openRoom)}
           onPayLastStay={() => handlePayLastStay(openRoom)}
           onStayAction={(action) => handleRoomDialogAction(openRoom, action)}
@@ -483,6 +531,19 @@ export default function RoomBoard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Package question: before every check-in, or to switch the package */}
+      {packageQuestion && (
+        <PackageDialog
+          request={packageQuestion}
+          packages={data.packages}
+          settings={settings}
+          nightNow={data.nightNow}
+          busy={busy}
+          onChoose={handlePackageChosen}
+          onCancel={() => setPackageQuestion(null)}
+        />
       )}
 
       {/* Payment question after a check-in, or at check-out when not paid yet */}

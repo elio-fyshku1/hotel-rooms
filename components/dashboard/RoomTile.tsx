@@ -6,7 +6,7 @@
  * A "Pa paguar" label shows when the guest (current or last) still owes money.
  */
 import type { RoomView, Settings } from "@/lib/types";
-import { amountDue, formatCountdown, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
+import { amountDue, formatCountdown, formatMoney, formatTime } from "@/lib/format";
 
 export type RoomStatus =
   | "free"      // green: no guest, ready
@@ -54,6 +54,7 @@ export default function RoomTile({ room, status, now, settings, onOpen }: RoomTi
 
   // Unpaid: the current guest hasn't paid yet, or the last guest left without paying
   const unpaidAmount = stay ? amountDue(stay) : room.unpaid?.amount ?? 0;
+  const unpaidCurrency = stay?.currency ?? room.unpaid?.currency ?? settings.currency;
 
   return (
     <button type="button" className={`room ${status}`} onClick={onOpen}>
@@ -62,9 +63,7 @@ export default function RoomTile({ room, status, now, settings, onOpen }: RoomTi
 
       {stay && (
         <>
-          <span className={`badge room-type ${stay.stay_type}`}>
-            {stayTypeLabel(stay.stay_type, settings.short_minutes)}
-          </span>
+          <span className={`badge room-type ${stay.stay_type}`}>{stay.package_name}</span>
           <span className="room-times">
             Hyrja {formatTime(stay.check_in, settings.timezone)} · deri {formatTime(stay.expected_out, settings.timezone)}
           </span>
@@ -75,7 +74,7 @@ export default function RoomTile({ room, status, now, settings, onOpen }: RoomTi
       )}
 
       {unpaidAmount > 0 && (
-        <span className="room-unpaid">Pa paguar {formatMoney(unpaidAmount, settings.currency)}</span>
+        <span className="room-unpaid">Pa paguar {formatMoney(unpaidAmount, unpaidCurrency)}</span>
       )}
     </button>
   );

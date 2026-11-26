@@ -55,20 +55,18 @@ create table if not exists key_cards (
 
 -- -----------------------------------------------------------------------------
 -- settings
--- Exactly one row (id = 1). Prices, time rules and the hotel timezone.
+-- Exactly one row (id = 1). Time rules, overtime and the hotel timezone.
+-- The prices of the stays themselves are in the packages table.
 -- -----------------------------------------------------------------------------
 create table if not exists settings (
   id               int primary key default 1 check (id = 1),
   hotel_name       text not null default 'Hotel',
-  currency         text not null default 'EUR',
+  currency         text not null default 'ALL',
   timezone         text not null default 'Europe/Tirane',
-  short_price      numeric(10,2) not null default 20,
-  short_minutes    int not null default 120,
-  night_price      numeric(10,2) not null default 40,
   night_start      time not null default '21:00',   -- check-ins from this time are "night" stays
   night_end        time not null default '06:00',   -- ...until this time in the morning
   night_checkout   time not null default '12:00',   -- night guests must leave by this time
-  extra_hour_price numeric(10,2) not null default 10, -- overtime charge per started hour
+  extra_hour_price numeric(10,2) not null default 500, -- overtime charge per started hour
   grace_minutes    int not null default 10,         -- overtime tolerated before suggesting a charge
   require_cleaning boolean not null default true    -- room waits for "cleaned" after checkout
 );
@@ -77,13 +75,55 @@ insert into settings (id) values (1) on conflict (id) do nothing;
 
 
 -- -----------------------------------------------------------------------------
+-- packages
+-- What the guest can choose when the room is given: 2, 3, 4, 5 hours, 24 hours
+-- or the night. minutes = length of the stay, counted from check-in; null
+-- means a night stay, which ends at settings.night_checkout the next morning.
+-- Stays copy the name and price, so editing or deleting a package never
+-- changes the history.
+-- -----------------------------------------------------------------------------
+create table if not exists packages (
+  id      serial primary key,
+  name    text not null,
+  minutes int check (minutes > 0),
+  price   numeric(10,2) not null check (price >= 0),
+  sort    int not null default 0,
+  active  boolean not null default true
+);
+
+-- First run with packages: create the hotel's price list. Older versions had
+-- one price for "2 hours" and one for the night, in euro, so the currency and
+-- the overtime price switch to lekë at the same moment. Runs only once (while
+-- the table is empty); after that prices are changed in Administrimi.
+do $$
+begin
+  if not exists (select 1 from packages) then
+    insert into packages (name, minutes, price, sort) values
+      ('2 orë',   120,  2000, 1),
+      ('3 orë',   180,  2500, 2),
+      ('4 orë',   240,  3000, 3),
+      ('5 orë',   300,  3500, 4),
+      ('24 orë',  1440, 4000, 5),
+      ('Natë',    null, 3500, 6);
+    update settings set currency = 'ALL', extra_hour_price = 500 where id = 1;
+  end if;
+end $$;
+
+-- The single prices from older versions are replaced by the packages above
+alter table settings drop column if exists short_price;
+alter table settings drop column if exists short_minutes;
+alter table settings drop column if exists night_price;
+
+
+-- -----------------------------------------------------------------------------
 -- stays
 -- One row per guest visit, from the check-in scan to the check-out scan.
 --   status = 'open'      guest is (or may still be) in the room
 --   status = 'closed'    checked out normally
 --   status = 'cancelled' check-in was a mistake (kept for the audit trail)
--- base_price is the price of the stay type, extra_charge collects overtime and
--- extensions. Prices are copied into the row so later price changes don't
+-- package_name and base_price are copied from the package chosen at check-in
+-- (stay_type is 'night' for the night package, 'short' for the others);
+-- extra_charge collects overtime and extensions. Prices are copied into the row so later price changes don't
 -- rewrite history.
 -- -----------------------------------------------------------------------------
 create table if not exists stays (
@@ -109,6 +149,12 @@ alter table stays add column if not exists paid_amount numeric(10,2) not null de
 alter table stays add column if not exists paid_at timestamptz;          -- when the last payment was taken
 alter table stays add column if not exists paid_by int references users(id); -- who took it
 
+-- Name of the package the guest chose ("3 orë", "Natë"...). Stays from before
+-- packages existed were all 2 hours or a night.
+alter table stays add column if not exists package_name text not null default '';
+update stays set package_name = case when stay_type = 'night' then 'Natë' else '2 orë' end
+ where package_name = '';
+
 -- A room can never have two open stays at the same time, even if two
 -- devices scan at the same moment.
 create unique index if not exists stays_one_open_per_room on stays(room_id) where status = 'open';
@@ -125,7 +171,7 @@ create index if not exists stays_check_in_idx on stays(check_in);
 create table if not exists stay_events (
   id       serial primary key,
   stay_id  int not null references stays(id) on delete cascade,
-  kind     text not null,  -- check_in, check_out, extend_hour, extend_block, set_type, cancel
+  kind     text not null,  -- check_in, check_out, payment, extend_hour, set_package, cancel
   amount   numeric(10,2) not null default 0,
   user_id  int references users(id),
   at       timestamptz not null default now(),
@@ -143,6 +189,7 @@ create index if not exists stay_events_stay_idx on stay_events(stay_id);
 
 -- Returns 'night' when the given moment falls inside the night window
 -- (e.g. 21:00 - 06:00, which wraps past midnight), otherwise 'short'.
+-- Used to suggest the night package when a room is given in the evening.
 create or replace function auto_stay_type(at_ts timestamptz) returns text
 language sql stable as $$
   select case
@@ -160,14 +207,15 @@ language sql stable as $$
 $$;
 
 
--- Returns the moment a stay of the given type, started at from_ts, has to end.
---   short: start + short_minutes
---   night: the next night_checkout time (same day if checked in after midnight)
-create or replace function stay_expected_out(stype text, from_ts timestamptz) returns timestamptz
+-- Returns the moment a stay started at from_ts has to end.
+--   p_minutes set:  start + p_minutes (2 hours, 24 hours...)
+--   p_minutes null: night stay, the next night_checkout time (the same day if
+--                   the guest checked in after midnight)
+create or replace function stay_end(p_minutes int, from_ts timestamptz) returns timestamptz
 language sql stable as $$
   select case
-    when stype = 'short' then
-      from_ts + make_interval(mins => s.short_minutes)
+    when p_minutes is not null then
+      from_ts + make_interval(mins => p_minutes)
     else (
       case
         -- Checked in after midnight but before checkout time: leave the same day
@@ -182,11 +230,6 @@ language sql stable as $$
   where s.id = 1
 $$;
 
-
--- Returns the current price for a stay type.
-create or replace function stay_price(stype text) returns numeric
-language sql stable as $$
-  select case when stype = 'short' then short_price else night_price end
-  from settings
-  where id = 1
-$$;
+-- Replaced by stay_end and the packages table
+drop function if exists stay_expected_out(text, timestamptz);
+drop function if exists stay_price(text);

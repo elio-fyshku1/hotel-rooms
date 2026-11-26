@@ -1,13 +1,13 @@
 /**
  * POST /api/stays/:id
- * Body: one of the StayAction objects (checkout, extend, set_type, cancel).
+ * Body: one of the StayAction objects (pay, checkout, extend_hour, set_package, cancel).
  */
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
 import { applyStayAction } from "@/lib/stays";
 import { withErrorHandling } from "@/lib/errors";
 
-// Apply a worker action (checkout, extend, set_type, cancel) to a stay
+// Apply a worker action (pay, checkout, extend_hour, set_package, cancel) to a stay
 export const POST = withErrorHandling(
   async (request: Request, context: { params: Promise<{ id: string }> }) => {
     const user = await requireApiUser();

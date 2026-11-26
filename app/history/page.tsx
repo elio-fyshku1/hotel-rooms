@@ -5,7 +5,7 @@
 import { requireUser } from "@/lib/auth";
 import { getSettings } from "@/lib/stays";
 import { getHistory, HistoryRow } from "@/lib/history";
-import { formatDateTime, formatDuration, formatMoney, stayTypeLabel } from "@/lib/format";
+import { formatDateTime, formatDuration, formatMoney } from "@/lib/format";
 import NavBar from "@/components/NavBar";
 
 const STATUS_LABELS: Record<HistoryRow["status"], string> = {
@@ -39,10 +39,12 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const revenue = validRows.reduce((sum, row) => sum + row.total, 0);
   const extras = validRows.reduce((sum, row) => sum + row.extra_charge, 0);
   const unpaid = validRows.reduce((sum, row) => sum + row.due, 0);
-  const shortCount = validRows.filter((row) => row.stay_type === "short").length;
-  const nightCount = validRows.length - shortCount;
   const cancelledCount = rows.length - validRows.length;
 
+  // How many stays of each package, e.g. "5 × 2 orë · 2 × Natë"
+  const perPackage = new Map<string, number>();
+  for (const row of validRows) perPackage.set(row.package_name, (perPackage.get(row.package_name) ?? 0) + 1);
+  const packageSummary = [...perPackage.entries()].map(([name, count]) => `${count} × ${name}`).join(" · ");
   // Check-ins and revenue per worker, for checking the cash at the end of a shift
   const perWorker = new Map<string, { count: number; total: number }>();
   for (const row of validRows) {
@@ -86,7 +88,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
             <div className="muted small">Qëndrime</div>
             <h2>{validRows.length}</h2>
             <div className="muted small">
-              {shortCount} × {stayTypeLabel("short", settings.short_minutes)} · {nightCount} × natë
+              {packageSummary || "-"}
               {cancelledCount > 0 && ` · ${cancelledCount} të anuluara`}
             </div>
           </div>
@@ -117,7 +119,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
             <thead>
               <tr>
                 <th>Dhoma</th>
-                <th>Lloji</th>
+                <th>Paketa</th>
                 <th>Hyrja</th>
                 <th>Dalja</th>
                 <th>Kohëzgjatja</th>
@@ -133,7 +135,7 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
               {rows.map((row) => (
                 <tr key={row.id} className={row.status === "cancelled" ? "faded" : ""}>
                   <td><b>{row.room}</b></td>
-                  <td><span className={`badge ${row.stay_type}`}>{stayTypeLabel(row.stay_type, settings.short_minutes)}</span></td>
+                  <td><span className={`badge ${row.stay_type}`}>{row.package_name}</span></td>
                   <td>{formatDateTime(row.check_in, settings.timezone)}</td>
                   <td>{formatDateTime(row.check_out, settings.timezone)}</td>
                   <td>{formatDuration(row.minutes)}</td>

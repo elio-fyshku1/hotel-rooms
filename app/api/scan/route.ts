@@ -1,8 +1,8 @@
 /**
  * POST /api/scan
- * Body: { code, allowDirty? }
- * Called every time a card is presented to the reader. Checks the room in or
- * out depending on its current state (see scanCard in lib/stays.ts).
+ * Body: { code, allowDirty?, packageId? }
+ * Called every time a card is presented to the reader. Checks the room out,
+ * or asks for the package and then checks it in (see scanCard in lib/stays.ts).
  */
 import { NextResponse } from "next/server";
 import { requireApiUser } from "@/lib/auth";
@@ -14,11 +14,11 @@ export const POST = withErrorHandling(async (request: Request) => {
   const user = await requireApiUser();
   if (user instanceof NextResponse) return user;
 
-  const { code, allowDirty } = await request.json();
+  const { code, allowDirty, packageId } = await request.json();
   if (typeof code !== "string" || !code.trim()) {
     throw new UserError("Kodi i kartës mungon.");
   }
 
-  const result = await scanCard(code, user.id, Boolean(allowDirty));
+  const result = await scanCard(code, user.id, Boolean(allowDirty), packageId == null ? null : Number(packageId));
   return NextResponse.json(result);
 });

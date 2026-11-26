@@ -7,6 +7,11 @@
 // Any other code is shown as is (e.g. "20 GBP").
 const CURRENCY_SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", ALL: "Lekë" };
 
+/** "ALL" -> "Lekë", "EUR" -> "€" (other codes as they are). */
+export function currencySymbol(currency: string): string {
+  return CURRENCY_SYMBOLS[currency] ?? currency;
+}
+
 /**
  * 20 -> "20 €", 12.5 -> "12,50 €"
  * Formatted by hand instead of Intl.NumberFormat because browsers and Node
@@ -15,7 +20,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", ALL: "L
  */
 export function formatMoney(amount: number, currency: string): string {
   const number = Number.isInteger(amount) ? String(amount) : amount.toFixed(2).replace(".", ",");
-  return `${number} ${CURRENCY_SYMBOLS[currency] ?? currency}`;
+  return `${number} ${currencySymbol(currency)}`;
 }
 
 /** Date -> "14:05" */
@@ -55,12 +60,6 @@ export function formatDuration(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = Math.round(totalMinutes % 60);
   return hours > 0 ? `${hours} orë ${minutes} min` : `${minutes} min`;
-}
-
-/** Stay type as shown to the worker: "Natë" or e.g. "2 orë" (from the short stay length). */
-export function stayTypeLabel(type: "short" | "night", shortMinutes = 120): string {
-  if (type === "night") return "Natë";
-  return shortMinutes % 60 === 0 ? `${shortMinutes / 60} orë` : `${shortMinutes} min`;
 }
 
 /** What a guest still has to pay for a stay (never negative). */

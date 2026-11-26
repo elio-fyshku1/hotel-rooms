@@ -8,6 +8,7 @@ export interface HistoryRow {
   id: number;
   room: string;
   stay_type: StayType;
+  package_name: string;
   status: StayStatus;
   check_in: Timestamp;
   expected_out: Timestamp;
@@ -36,6 +37,7 @@ export async function getHistory(from: string, to: string, room?: string): Promi
     `select s.id,
             r.number as room,
             s.stay_type,
+            s.package_name,
             s.status,
             s.check_in,
             s.expected_out,

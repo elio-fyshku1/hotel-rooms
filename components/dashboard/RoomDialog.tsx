@@ -3,14 +3,14 @@
  * Dialog opened by tapping a room. What it offers depends on the room:
  *
  *   free / cleaning  -> collect an unpaid last stay, mark as cleaned,
- *                       or check in without a card
- *   occupied         -> take payment, check out, +1 hour, switch 2 hours/night, cancel
+ *                       or check in without a card (one button per package)
+ *   occupied         -> take payment, check out, +1 hour, change package, cancel
  *   overdue          -> "guest left" (check out, no extra) or charge extra
  *
  * The dialog only reports what the worker chose; RoomBoard does the API calls.
  */
-import type { RoomView, Settings, StayAction, StayType } from "@/lib/types";
-import { amountDue, formatCountdown, formatMoney, formatTime, stayTypeLabel } from "@/lib/format";
+import type { Package, RoomView, Settings, StayAction } from "@/lib/types";
+import { amountDue, formatCountdown, formatMoney, formatTime } from "@/lib/format";
 import type { RoomStatus } from "./RoomTile";
 
 interface RoomDialogProps {
@@ -18,9 +18,12 @@ interface RoomDialogProps {
   status: RoomStatus;
   now: number;
   settings: Settings;
+  packages: Package[];
+  nightNow: boolean;
   busy: boolean;
   onClose: () => void;
-  onCheckIn: (type: StayType) => void;
+  onCheckIn: (pkg: Package) => void;
+  onChangePackage: () => void;
   onMarkCleaned: () => void;
   onStayAction: (action: StayAction) => void;
   onPayLastStay: () => void;
@@ -28,7 +31,7 @@ interface RoomDialogProps {
 
 /** Dialog frame; the content depends on whether the room has a guest. */
 export default function RoomDialog(props: RoomDialogProps) {
-  const { room, settings, onClose } = props;
+  const { room, onClose } = props;
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -36,11 +39,7 @@ export default function RoomDialog(props: RoomDialogProps) {
       <div className="modal" onClick={(event) => event.stopPropagation()}>
         <h2>
           Dhoma {room.number}
-          {room.stay && (
-            <span className={`badge ${room.stay.stay_type}`}>
-              {stayTypeLabel(room.stay.stay_type, settings.short_minutes)}
-            </span>
-          )}
+          {room.stay && <span className={`badge ${room.stay.stay_type}`}>{room.stay.package_name}</span>}
         </h2>
 
         {room.stay ? <OccupiedRoomContent {...props} /> : <FreeRoomContent {...props} />}
@@ -54,17 +53,18 @@ export default function RoomDialog(props: RoomDialogProps) {
 }
 
 /** Free or waiting-for-cleaning room. */
-function FreeRoomContent({ room, status, settings, busy, onCheckIn, onMarkCleaned, onPayLastStay }: RoomDialogProps) {
+function FreeRoomContent(props: RoomDialogProps) {
+  const { room, status, settings, packages, nightNow, busy, onCheckIn, onMarkCleaned, onPayLastStay } = props;
   return (
     <div className="stack">
       {/* The last guest left without paying: ask for the money first */}
       {room.unpaid && (
         <>
           <div className="alert">
-            Klienti i fundit nuk ka paguar {formatMoney(room.unpaid.amount, settings.currency)}.
+            Klienti i fundit nuk ka paguar {formatMoney(room.unpaid.amount, room.unpaid.currency)}.
           </div>
           <button className="btn green big" disabled={busy} onClick={onPayLastStay}>
-            U pagua {formatMoney(room.unpaid.amount, settings.currency)}
+            U pagua {formatMoney(room.unpaid.amount, room.unpaid.currency)}
           </button>
         </>
       )}
@@ -78,22 +78,30 @@ function FreeRoomContent({ room, status, settings, busy, onCheckIn, onMarkCleane
       <p className="muted small no-margin">
         Zakonisht mjafton të afrosh kartën te lexuesi. Përdori butonat më poshtë vetëm kur karta nuk lexohet.
       </p>
-      <button className="btn red big" disabled={busy} onClick={() => onCheckIn("short")}>
-        Hyrje · {stayTypeLabel("short", settings.short_minutes)} · {formatMoney(settings.short_price, settings.currency)}
-      </button>
-      <button className="btn big" disabled={busy} onClick={() => onCheckIn("night")}>
-        Hyrje · natë · {formatMoney(settings.night_price, settings.currency)}
-      </button>
+      {/* Same packages as after a scan; the night one is highlighted in the evening */}
+      <div className="package-grid" style={{ marginTop: 0 }}>
+        {packages.map((pkg) => (
+          <button
+            key={pkg.id}
+            className={`btn package ${nightNow && pkg.minutes === null ? "blue" : ""}`}
+            disabled={busy}
+            onClick={() => onCheckIn(pkg)}
+          >
+            <span className="package-name">{pkg.name}</span>
+            <span className="package-price">{formatMoney(pkg.price, settings.currency)}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 /** Room with a guest: stay details plus the actions for normal or overdue time. */
-function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction }: RoomDialogProps) {
+function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction, onChangePackage }: RoomDialogProps) {
   const stay = room.stay!;
   const tz = settings.timezone;
-  // Shortcut for amounts in the hotel currency
-  const money = (amount: number) => formatMoney(amount, settings.currency);
+  // Shortcut for amounts in the currency of this stay
+  const money = (amount: number) => formatMoney(amount, stay.currency);
 
   const remaining = new Date(stay.expected_out).getTime() - now;
   const minutesOver = Math.floor(-remaining / 60000);
@@ -146,18 +154,14 @@ function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction }
 
           <div className="muted small">Klienti është ende brenda? Paguan shtesë:</div>
           <div className="row">
-            <button className="btn amber grow" disabled={busy} onClick={() => onStayAction({ action: "extend", kind: "hour" })}>
+            <button className="btn amber grow" disabled={busy} onClick={() => onStayAction({ action: "extend_hour" })}>
               +1 orë ({money(settings.extra_hour_price)})
             </button>
-            <button className="btn amber grow" disabled={busy} onClick={() => onStayAction({ action: "extend", kind: "block" })}>
-              +{stayTypeLabel("short", settings.short_minutes)} ({money(settings.short_price)})
+            {/* e.g. 2 hours -> 4 hours or night: new price, time from check-in */}
+            <button className="btn amber grow" disabled={busy} onClick={onChangePackage}>
+              Kalo në paketë tjetër
             </button>
           </div>
-          {stay.stay_type === "short" && (
-            <button className="btn" disabled={busy} onClick={() => onStayAction({ action: "set_type", type: "night" })}>
-              Qëndron natën (gjithsej {money(settings.night_price)})
-            </button>
-          )}
         </div>
       ) : (
         // Time not up yet
@@ -166,15 +170,11 @@ function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction }
             Regjistro daljen tani
           </button>
           <div className="row">
-            <button className="btn grow" disabled={busy} onClick={() => onStayAction({ action: "extend", kind: "hour" })}>
+            <button className="btn grow" disabled={busy} onClick={() => onStayAction({ action: "extend_hour" })}>
               +1 orë ({money(settings.extra_hour_price)})
             </button>
-            <button
-              className="btn grow"
-              disabled={busy}
-              onClick={() => onStayAction({ action: "set_type", type: stay.stay_type === "short" ? "night" : "short" })}
-            >
-              {stay.stay_type === "short" ? "Ndrysho në natë" : `Ndrysho në ${stayTypeLabel("short", settings.short_minutes)}`}
+            <button className="btn grow" disabled={busy} onClick={onChangePackage}>
+              Ndrysho paketën
             </button>
           </div>
           <button className="btn sm" disabled={busy} onClick={() => onStayAction({ action: "cancel" })}>

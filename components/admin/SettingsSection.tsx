@@ -1,6 +1,6 @@
 "use client";
 /**
- * Prices and time rules form.
+ * Time rules and overtime form (package prices are in PackagesSection).
  */
 import { useState } from "react";
 import type { Settings } from "@/lib/types";
@@ -35,15 +35,12 @@ export default function SettingsSection({ settings, runChange }: SettingsSection
 
   return (
     <section className="card">
-      <h3>Çmimet dhe rregullat</h3>
+      <h3>Rregullat</h3>
       <div className="grid">
         {field("hotel_name", "Emri i hotelit")}
         {field("currency", "Monedha (EUR, ALL...)")}
         {field("timezone", "Zona kohore")}
-        {field("short_price", "Çmimi për qëndrim të shkurtër", "number")}
-        {field("short_minutes", "Kohëzgjatja e qëndrimit të shkurtër (minuta)", "number")}
-        {field("night_price", "Çmimi për natë", "number")}
-        {field("night_start", "Nga kjo orë, hyrjet janë për natë", "time")}
+        {field("night_start", "Nga kjo orë sugjerohet paketa e natës", "time")}
         {field("night_end", "Nata mbaron në", "time")}
         {field("night_checkout", "Klientët e natës dalin deri në", "time")}
         {field("extra_hour_price", "Shtesa për çdo orë të filluar", "number")}
