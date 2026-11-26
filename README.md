@@ -38,7 +38,7 @@ Interface language: Albanian.
 
 Other rules:
 - The same card scanned twice within 20 seconds is ignored (scanners sometimes read twice).
-- A worker can cancel a mistaken check-in within 10 minutes; an admin at any time.
+- Any user can cancel a mistaken check-in at any time. The stay stays in the History as "anuluar", with the name of who cancelled it.
 - Every action is stored in `stay_events` with the user who did it. The History page shows revenue and check-ins per worker.
 - Several devices can have the board open; they refresh every 5 seconds and the database never allows two open stays for one room.
 
