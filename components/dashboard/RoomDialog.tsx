@@ -11,6 +11,7 @@
  *
  * The dialog only reports what the worker chose; RoomBoard does the API calls.
  */
+import { WORKER_CANCEL_MINUTES } from "@/lib/types";
 import type { Package, RoomView, Settings, StayAction } from "@/lib/types";
 import { amountDue, formatCountdown, formatMoney, formatTime } from "@/lib/format";
 import type { RoomStatus } from "./RoomTile";
@@ -22,6 +23,7 @@ interface RoomDialogProps {
   settings: Settings;
   packages: Package[];
   nightNow: boolean;
+  isAdmin: boolean;
   busy: boolean;
   onClose: () => void;
   onCheckIn: (pkg: Package) => void;
@@ -110,7 +112,7 @@ function CheckInButtons({ settings, packages, nightNow, busy, onCheckIn }: RoomD
 }
 
 /** Room with a guest: stay details plus the actions for normal or overdue time. */
-function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction, onChangePackage }: RoomDialogProps) {
+function OccupiedRoomContent({ room, status, now, settings, isAdmin, busy, onStayAction, onChangePackage }: RoomDialogProps) {
   const stay = room.stay!;
   const tz = settings.timezone;
   // Shortcut for amounts in the currency of this stay
@@ -119,6 +121,10 @@ function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction, 
   const remaining = new Date(stay.expected_out).getTime() - now;
   const minutesOver = Math.floor(-remaining / 60000);
   const due = amountDue(stay);
+
+  // Workers may cancel only during the first minutes after check-in
+  const cancelMinutesLeft = Math.ceil(WORKER_CANCEL_MINUTES - (now - new Date(stay.check_in).getTime()) / 60000);
+  const canCancel = isAdmin || cancelMinutesLeft > 0;
 
   return (
     <>
@@ -190,8 +196,13 @@ function OccupiedRoomContent({ room, status, now, settings, busy, onStayAction, 
               Ndrysho paketën
             </button>
           </div>
-          <button className="btn sm" disabled={busy} onClick={() => onStayAction({ action: "cancel" })}>
-            Anulo hyrjen (gabim)
+          {/* Workers see how long they can still cancel; afterwards only an admin can */}
+          <button className="btn sm" disabled={busy || !canCancel} onClick={() => onStayAction({ action: "cancel" })}>
+            {isAdmin
+              ? "Anulo hyrjen (gabim)"
+              : canCancel
+                ? `Anulo hyrjen (gabim) · edhe ${cancelMinutesLeft} min`
+                : `Anulimi pas ${WORKER_CANCEL_MINUTES} min: vetëm administratori`}
           </button>
         </div>
       )}

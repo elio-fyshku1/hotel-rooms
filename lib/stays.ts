@@ -8,16 +8,13 @@
 import type { PoolClient } from "pg";
 import { pool, query, transaction, Queryable } from "./db";
 import { UserError } from "./errors";
+import { WORKER_CANCEL_MINUTES } from "./types";
 import type { Package, RoomView, ScanResult, Settings, Stay, StayAction, Timestamp } from "./types";
 
 // Readers sometimes register the same card twice in a row. A second read of
 // the same room within this many seconds is ignored instead of undoing the
 // check-in (or check-out) that just happened.
 const DOUBLE_SCAN_SECONDS = 20;
-
-// Workers can cancel a mistaken check-in only shortly after it was made.
-// Admins can cancel at any time.
-const WORKER_CANCEL_MINUTES = 10;
 
 
 // -----------------------------------------------------------------------------

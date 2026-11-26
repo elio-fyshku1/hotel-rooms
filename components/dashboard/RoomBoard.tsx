@@ -43,8 +43,11 @@ interface BoardData {
  */
 type PackageQuestion = PackageRequest & { code?: string; stayId?: number };
 
-/** Room board with its data, timers, scanner handling and dialogs. */
-export default function RoomBoard() {
+/**
+ * Room board with its data, timers, scanner handling and dialogs.
+ * `isAdmin` only changes what the room dialog offers (cancel after 10 minutes).
+ */
+export default function RoomBoard({ isAdmin }: { isAdmin: boolean }) {
   // --- Data from the server ---
   const [data, setData] = useState<BoardData | null>(null);
   const [connectionError, setConnectionError] = useState(false);
@@ -481,6 +484,7 @@ export default function RoomBoard() {
           onClose={() => setOpenRoomId(null)}
           packages={data.packages}
           nightNow={data.nightNow}
+          isAdmin={isAdmin}
           onCheckIn={(pkg) => handleCheckInWithoutCard(openRoom, pkg.id)}
           onChangePackage={() => {
             setOpenRoomId(null);

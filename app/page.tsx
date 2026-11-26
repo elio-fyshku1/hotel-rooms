@@ -14,7 +14,7 @@ export default async function HomePage() {
   return (
     <>
       <NavBar user={user} hotelName={settings.hotel_name} />
-      <RoomBoard />
+      <RoomBoard isAdmin={user.role === "admin"} />
     </>
   );
 }

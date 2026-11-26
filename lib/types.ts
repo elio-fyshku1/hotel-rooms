@@ -8,6 +8,12 @@
 
 export type Timestamp = string | Date;
 
+/**
+ * Workers can cancel a mistaken check-in only this many minutes after it was
+ * made; admins at any time. Shared so the room dialog can show the time left.
+ */
+export const WORKER_CANCEL_MINUTES = 10;
+
 export type StayType = "short" | "night";
 export type StayStatus = "open" | "closed" | "cancelled";
 export type UserRole = "admin" | "worker";
