@@ -11,6 +11,8 @@ import PackagesSection from "./PackagesSection";
 import RoomsSection from "./RoomsSection";
 import CardsSection from "./CardsSection";
 import UsersSection from "./UsersSection";
+import SecuritySection from "./SecuritySection";
+import type { LoginRow, SecuritySettings } from "./SecuritySection";
 
 // Row types loaded by app/admin/page.tsx and passed to the sections
 export interface AdminRoom {
@@ -50,10 +52,14 @@ interface AdminPanelProps {
   rooms: AdminRoom[];
   cards: AdminCard[];
   users: AdminUser[];
+  security: SecuritySettings;
+  myIp: string;
+  logins: LoginRow[];
 }
 
 /** Message area plus the admin sections. */
-export default function AdminPanel({ currentUserId, settings, packages, rooms, cards, users }: AdminPanelProps) {
+export default function AdminPanel(props: AdminPanelProps) {
+  const { currentUserId, settings, packages, rooms, cards, users } = props;
   const router = useRouter();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -85,6 +91,13 @@ export default function AdminPanel({ currentUserId, settings, packages, rooms, c
       <PackagesSection packages={packages} settings={settings} runChange={runChange} />
       <SettingsSection settings={settings} runChange={runChange} />
       <UsersSection users={users} currentUserId={currentUserId} runChange={runChange} />
+      <SecuritySection
+        security={props.security}
+        myIp={props.myIp}
+        logins={props.logins}
+        timezone={settings.timezone}
+        runChange={runChange}
+      />
     </div>
   );
 }

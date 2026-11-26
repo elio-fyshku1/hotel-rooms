@@ -140,6 +140,21 @@ everything and creates the tables.
 
 ---
 
+## Security (Administrimi)
+
+- **Njoftimet me email**: the owner gets an email when a worker logs in or out, and when a worker
+  is refused outside the hotel. Mail is sent from a Gmail account with an *app password*
+  (Google Account → Security → 2-Step Verification → App passwords). "Dërgo email provë" checks it.
+- **Interneti i hotelit**: the hotel's public IP address(es). With "Punonjësit vetëm nga hoteli" on,
+  workers can log in and use the app only from those addresses; admins from anywhere. A worker
+  already logged in elsewhere is logged out on the next click. If the provider changes the hotel's IP,
+  the "blocked" email shows the new one, so it can be added from the owner's phone.
+- **Hyrjet e fundit në sistem**: every login, logout, wrong password and blocked attempt, with IP.
+
+The IP comes from Caddy (`X-Forwarded-For`); the app port is bound to 127.0.0.1 on the server, so it
+can't be reached around Caddy. Optional `SMTP_HOST` / `SMTP_PORT` in `.env` use another mail server
+instead of Gmail.
+
 ## Project structure
 
 ```

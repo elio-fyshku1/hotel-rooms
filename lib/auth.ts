@@ -4,13 +4,15 @@
  * After a successful login the server puts a signed token (JWT) in an
  * HTTP-only cookie. The token only holds the user id; on every request the
  * user is loaded from the database again, so a deactivated worker is locked
- * out immediately instead of when the token expires.
+ * out immediately instead of when the token expires. The same check applies
+ * "workers only from the hotel" (lib/network.ts) on every request.
  */
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { query } from "./db";
+import { clientIp, getHotelRule, isHotelIp } from "./network";
 import type { SessionUser } from "./types";
 
 const COOKIE_NAME = "hotel_session";
@@ -49,7 +51,11 @@ export async function destroySession(): Promise<void> {
   cookieStore.delete(COOKIE_NAME);
 }
 
-/** Returns the logged-in user, or null if there is no valid session. */
+/**
+ * Returns the logged-in user, or null if there is no valid session.
+ * A worker outside the hotel's network (while that rule is on) counts as
+ * logged out.
+ */
 export async function getCurrentUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -61,7 +67,14 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
       "select id, username, full_name, role from users where id = $1 and active",
       [payload.uid]
     );
-    return rows[0] ?? null;
+    const user = rows[0];
+    if (!user) return null;
+
+    if (user.role === "worker") {
+      const rule = await getHotelRule();
+      if (rule.on && !isHotelIp(await clientIp(), rule)) return null;
+    }
+    return user;
   } catch {
     // Expired or tampered token
     return null;

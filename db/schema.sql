@@ -181,6 +181,38 @@ create table if not exists stay_events (
 create index if not exists stay_events_stay_idx on stay_events(stay_id);
 
 
+-- -----------------------------------------------------------------------------
+-- Security: email alerts, hotel network, login history
+-- -----------------------------------------------------------------------------
+
+-- Email alerts are sent through a Gmail account (smtp_user + an app password)
+-- to notify_email. The password never leaves the server.
+alter table settings add column if not exists notify_email  text not null default '';
+alter table settings add column if not exists smtp_user     text not null default '';
+alter table settings add column if not exists smtp_password text not null default '';
+alter table settings add column if not exists notify_logins boolean not null default true;
+-- Public IP addresses of the hotel's internet line, one per line. When
+-- workers_only_from_hotel is on, workers can use the app only from these
+-- (admins can use it from anywhere).
+alter table settings add column if not exists hotel_ips text not null default '';
+alter table settings add column if not exists workers_only_from_hotel boolean not null default false;
+
+-- Every login and logout: who, from which IP, and whether it was let in.
+-- result: ok, logout, wrong_password, outside_hotel
+create table if not exists login_log (
+  id         serial primary key,
+  at         timestamptz not null default now(),
+  username   text not null,
+  user_id    int references users(id),
+  result     text not null,
+  ip         text not null default '',
+  user_agent text not null default '',
+  from_hotel boolean not null default false
+);
+
+create index if not exists login_log_at_idx on login_log(at desc);
+
+
 -- =============================================================================
 -- Functions
 -- The time rules live in the database so they are always evaluated in the

@@ -33,17 +33,23 @@ export function formatTime(value: string | Date, timezone: string): string {
   });
 }
 
-/** Date -> "22.11, 14:05" (or "-" when empty) */
+/**
+ * Date -> "22.11, 14:05" (or "-" when empty).
+ * Built from the parts by hand: Node and the browser format "sq-AL"
+ * differently, which would break pages rendered on both sides.
+ */
 export function formatDateTime(value: string | Date | null, timezone: string): string {
   if (!value) return "-";
-  return new Date(value).toLocaleString("sq-AL", {
+  const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  });
+  }).formatToParts(new Date(value));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("day")}.${part("month")}, ${part("hour")}:${part("minute")}`;
 }
 
 /** Milliseconds -> "1:23:45" (for countdowns) */

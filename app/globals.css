@@ -65,7 +65,7 @@ h2 { display: flex; align-items: center; gap: 10px; }
 
 /* ---------- Form controls ---------- */
 
-input, select {
+input, select, textarea {
   width: 100%;
   padding: 10px 12px;
   font-size: 15px;
@@ -75,7 +75,7 @@ input, select {
   border-radius: 10px;
 }
 
-input:focus, select:focus { outline: 2px solid var(--blue); border-color: transparent; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); border-color: transparent; }
 
 label { display: block; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
 
@@ -239,6 +239,8 @@ th { color: var(--muted); font-weight: 600; }
 }
 
 .alert-pulse { cursor: pointer; animation: pulse 1.2s infinite; }
+.alert.on { background: var(--green); }   /* security rule switched on */
+.alert.warn { background: #92400e; }      /* security rule switched off */
 
 
 /* ---------- Dialogs ---------- */
