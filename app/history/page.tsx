@@ -4,7 +4,7 @@
  */
 import { requireUser } from "@/lib/auth";
 import { getSettings } from "@/lib/stays";
-import { getHistory, HistoryRow } from "@/lib/history";
+import { getHistory, HistoryRow, HISTORY_HOURS } from "@/lib/history";
 import { formatDateTime, formatDuration, formatMoney } from "@/lib/format";
 import NavBar from "@/components/NavBar";
 
@@ -26,8 +26,14 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
 
   // Default period: today in the hotel's timezone ("sv-SE" formats as YYYY-MM-DD)
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: settings.timezone });
-  const from = params.from || today;
-  const to = params.to || from;
+
+  // Search only reaches back HISTORY_HOURS: dates before that are moved up to it
+  // (getHistory applies the exact cut-off time as well)
+  const cutoff = new Date(Date.now() - HISTORY_HOURS * 60 * 60 * 1000);
+  const firstDay = cutoff.toLocaleDateString("sv-SE", { timeZone: settings.timezone });
+  const clamp = (date: string) => (date < firstDay ? firstDay : date > today ? today : date);
+  const from = clamp(params.from || today);
+  const to = clamp(params.to || from);
   const room = params.room || "";
 
   const rows = await getHistory(from, to, room || undefined);
@@ -63,11 +69,11 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
         <form className="card row align-end" style={{ marginBottom: 12 }}>
           <div>
             <label htmlFor="from">Nga</label>
-            <input id="from" type="date" name="from" defaultValue={from} />
+            <input id="from" type="date" name="from" defaultValue={from} min={firstDay} max={today} />
           </div>
           <div>
             <label htmlFor="to">Deri</label>
-            <input id="to" type="date" name="to" defaultValue={to} />
+            <input id="to" type="date" name="to" defaultValue={to} min={firstDay} max={today} />
           </div>
           <div style={{ width: 120 }}>
             <label htmlFor="room">Dhoma</label>
@@ -81,6 +87,9 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
             </a>
           )}
         </form>
+        <p className="muted small" style={{ margin: "-4px 0 12px" }}>
+          Kërkimi tregon vetëm {HISTORY_HOURS} orët e fundit (nga {formatDateTime(cutoff, settings.timezone)}).
+        </p>
 
         {/* Totals */}
         <div className="grid" style={{ marginBottom: 12 }}>

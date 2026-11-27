@@ -4,6 +4,12 @@
 import { query } from "./db";
 import type { StayStatus, StayType, Timestamp } from "./types";
 
+/**
+ * How far back the history can be searched. Older stays stay in the
+ * database, they just can't be found from the app (page or CSV).
+ */
+export const HISTORY_HOURS = 72;
+
 export interface HistoryRow {
   id: number;
   room: string;
@@ -27,6 +33,7 @@ export interface HistoryRow {
 /**
  * Stays whose check-in date (in the hotel's timezone) is between `from` and
  * `to`, both inclusive, newest first. Optionally only one room.
+ * Never older than HISTORY_HOURS, whatever dates are asked for.
  *
  * `minutes` is the length of the stay so far for open stays.
  * `total` is 0 for cancelled stays so they don't count as revenue.
@@ -59,7 +66,8 @@ export async function getHistory(from: string, to: string, room?: string): Promi
        left join users user_out on user_out.id = s.checked_out_by
       where (s.check_in at time zone st.timezone)::date between $1::date and $2::date
         and ($3::text is null or r.number = $3)
+        and s.check_in >= now() - make_interval(hours => $4)
       order by s.check_in desc`,
-    [from, to, room || null]
+    [from, to, room || null, HISTORY_HOURS]
   );
 }
