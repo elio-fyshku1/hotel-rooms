@@ -216,6 +216,25 @@ create table if not exists login_log (
 create index if not exists login_log_at_idx on login_log(at desc);
 
 
+-- -----------------------------------------------------------------------------
+-- shifts
+-- A worker's shift starts when they log in and ends when they log out (or, if
+-- they forgot, when the next worker logs in). The shift's cash is not stored:
+-- it is the sum of the payments that worker took during the shift
+-- (stay_events, kind 'payment'), so it can never disagree with the stays.
+-- ended_by: 'logout' or 'next_login'
+-- -----------------------------------------------------------------------------
+create table if not exists shifts (
+  id         serial primary key,
+  user_id    int not null references users(id),
+  started_at timestamptz not null default now(),
+  ended_at   timestamptz,
+  ended_by   text not null default ''
+);
+
+create index if not exists shifts_started_idx on shifts(started_at desc);
+
+
 -- =============================================================================
 -- Functions
 -- The time rules live in the database so they are always evaluated in the

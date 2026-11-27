@@ -5,6 +5,7 @@
 import { requireUser } from "@/lib/auth";
 import { getSettings } from "@/lib/stays";
 import { getHistory, HistoryRow, HISTORY_HOURS } from "@/lib/history";
+import { recentShifts } from "@/lib/shifts";
 import { formatDateTime, formatDuration, formatMoney } from "@/lib/format";
 import NavBar from "@/components/NavBar";
 
@@ -37,6 +38,8 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
   const room = params.room || "";
 
   const rows = await getHistory(from, to, room || undefined);
+  // Shifts of the same period the search allows (to check each worker's cash)
+  const shifts = await recentShifts(HISTORY_HOURS);
   // Shortcut for amounts in the hotel currency
   const money = (amount: number) => formatMoney(amount, settings.currency);
 
@@ -121,6 +124,38 @@ export default async function HistoryPage({ searchParams }: HistoryPageProps) {
             {perWorker.size === 0 && <div className="muted small">-</div>}
           </div>
         </div>
+
+        {/* Shifts: from login to logout, with the money each worker took */}
+        {shifts.length > 0 && (
+          <div className="card table-wrap" style={{ marginBottom: 12 }}>
+            <h3>Turnet</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Punëtori</th>
+                  <th>Fillimi</th>
+                  <th>Mbarimi</th>
+                  <th className="text-right">Arka e turnit</th>
+                  <th className="text-right">Pagesa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shifts.map((shift) => (
+                  <tr key={shift.id}>
+                    <td>{shift.user_name}</td>
+                    <td>{formatDateTime(shift.started_at, settings.timezone)}</td>
+                    <td>
+                      {shift.ended_at ? formatDateTime(shift.ended_at, settings.timezone) : <span className="badge open">në turn</span>}
+                      {shift.ended_by === "next_login" && <span className="muted small"> (nuk doli, u mbyll nga turni tjetër)</span>}
+                    </td>
+                    <td className="text-right">{money(shift.cash)}</td>
+                    <td className="text-right">{shift.payments}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Stay list */}
         <div className="card table-wrap">

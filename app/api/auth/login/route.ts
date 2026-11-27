@@ -6,7 +6,8 @@
  * Every attempt goes into login_log. Workers:
  *   - are refused outside the hotel's network when that rule is on
  *     (the owner gets an email with the address they tried from),
- *   - trigger an email to the owner on every successful login (if enabled).
+ *   - trigger an email to the owner on every successful login (if enabled),
+ *   - start a shift (lib/shifts.ts): the shift cash on the board starts at 0.
  */
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
@@ -14,6 +15,7 @@ import { query } from "@/lib/db";
 import { createSession } from "@/lib/auth";
 import { clientIp, getHotelRule, isHotelIp } from "@/lib/network";
 import { alertLogin, logLogin } from "@/lib/notify";
+import { openShift } from "@/lib/shifts";
 import { withErrorHandling } from "@/lib/errors";
 
 // Compared against when the username doesn't exist, so the response time is
@@ -65,6 +67,9 @@ export const POST = withErrorHandling(async (request: Request) => {
 
   await createSession(user.id);
   await logLogin({ ...entry, result: "ok" });
-  if (user.role === "worker") alertLogin({ name, kind: "login", ip, userAgent, fromHotel });
+  if (user.role === "worker") {
+    await openShift(user.id);
+    alertLogin({ name, kind: "login", ip, userAgent, fromHotel });
+  }
   return NextResponse.json({ ok: true });
 });

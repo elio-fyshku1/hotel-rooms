@@ -140,6 +140,16 @@ everything and creates the tables.
 
 ---
 
+## Shifts
+
+- A worker's **shift** starts at login and ends at logout ("Dil"). If they forget, it ends when the
+  next worker logs in.
+- At the top of the room board the worker sees **Arka e turnit**: the money they took since their login
+  (starts at 0). The rooms themselves don't change between shifts.
+- The logout email to the owner includes the shift's cash. **Historiku → Turnet** lists the shifts of the
+  last 72 hours with each one's cash, to compare with the money handed over.
+- The cash is worked out from the payments each worker recorded, so it always matches the stays.
+
 ## Security (Administrimi)
 
 - **Njoftimet me email**: the owner gets an email when a worker logs in or out, and when a worker

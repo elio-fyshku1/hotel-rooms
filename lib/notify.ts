@@ -8,11 +8,14 @@
  */
 import nodemailer from "nodemailer";
 import { query } from "./db";
+import { formatMoney } from "./format";
+import type { ShiftSummary } from "./shifts";
 
 /** Mail settings from the settings row (server side only: holds the password). */
 interface MailSettings {
   hotel_name: string;
   timezone: string;
+  currency: string;
   notify_email: string;
   smtp_user: string;
   smtp_password: string;
@@ -22,7 +25,7 @@ interface MailSettings {
 /** Reads the mail settings fresh each time, so changes in Administrimi apply at once. */
 async function getMailSettings(): Promise<MailSettings> {
   const rows = await query<MailSettings>(
-    `select hotel_name, timezone, notify_email, smtp_user, smtp_password, notify_logins
+    `select hotel_name, timezone, currency, notify_email, smtp_user, smtp_password, notify_logins
        from settings where id = 1`
   );
   return rows[0];
@@ -91,6 +94,7 @@ export interface LoginAlert {
   ip: string;
   userAgent: string;
   fromHotel: boolean;
+  shift?: ShiftSummary | null;           // on logout: the shift that just ended
 }
 
 // Subject and first line of each alert
@@ -115,6 +119,9 @@ export function alertLogin(alert: LoginAlert): void {
     const text = ALERT_TEXT[alert.kind];
     const body = [
       `${alert.name} ${text.line}`,
+      ...(alert.shift
+        ? ["", `Arka e turnit: ${formatMoney(alert.shift.cash, mail.currency)} (${alert.shift.payments} pagesa)`]
+        : []),
       "",
       `Ora:        ${time}`,
       `IP:         ${alert.ip || "-"} (${alert.fromHotel ? "interneti i hotelit" : "jashtë hotelit"})`,

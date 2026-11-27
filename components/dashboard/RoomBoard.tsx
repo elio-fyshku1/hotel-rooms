@@ -24,6 +24,7 @@ import LateCheckoutDialog, { LateCheckout } from "./LateCheckoutDialog";
 import Notice, { NoticeData } from "./Notice";
 import PaymentDialog, { PaymentRequest } from "./PaymentDialog";
 import PackageDialog, { PackageRequest } from "./PackageDialog";
+import type { ShiftSummary } from "@/lib/shifts";
 
 const REFRESH_INTERVAL_MS = 5000;
 const NOTICE_DURATION_MS = 9000;
@@ -33,6 +34,7 @@ interface BoardData {
   settings: Settings;
   packages: Package[];
   nightNow: boolean; // night window: the night package is suggested
+  shift: ShiftSummary | null; // the worker's shift; null for admins (or no shift open)
   rooms: RoomView[];
 }
 
@@ -411,6 +413,16 @@ export default function RoomBoard({ isAdmin }: { isAdmin: boolean }) {
           <span className="stat occupied">Të zëna {counts.occupied + counts.overdue}</span>
           {counts.overdue > 0 && <span className="stat overdue">Kohë e kaluar {counts.overdue}</span>}
           {counts.cleaning > 0 && <span className="stat cleaning">Për pastrim {counts.cleaning}</span>}
+          {/* Workers: money taken in this shift (starts at 0 at login). The rooms above stay as they are. */}
+          {!isAdmin &&
+            (data.shift ? (
+              <span className="stat shift" title={`${data.shift.payments} pagesa`}>
+                Arka e turnit {formatMoney(data.shift.cash, settings.currency)}
+                <span className="stat-note"> · nga {formatTime(data.shift.started_at, timezone)}</span>
+              </span>
+            ) : (
+              <span className="stat shift">Turni nuk është hapur: dilni dhe hyni sërish</span>
+            ))}
         </div>
         <span className="spacer" />
         <span className="clock">{new Date(now).toLocaleTimeString("sq-AL", { timeZone: timezone, hourCycle: "h23" })}</span>

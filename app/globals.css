@@ -148,6 +148,8 @@ th { color: var(--muted); font-weight: 600; }
 .stat.occupied { color: #fca5a5; }
 .stat.overdue { background: var(--red); color: white; }
 .stat.cleaning { color: #fcd34d; }
+.stat.shift { color: #93c5fd; }               /* worker's shift cash */
+.stat-note { font-weight: 500; opacity: 0.75; }
 
 .clock { color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
 
