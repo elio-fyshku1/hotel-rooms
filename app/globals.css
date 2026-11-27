@@ -313,6 +313,12 @@ th { color: var(--muted); font-weight: 600; }
 .message { cursor: pointer; }
 .message.ok { border-color: var(--green); }
 .message.fail { border-color: var(--red); color: #fca5a5; }
+/* Admin result message: floats at the bottom of the screen, above the page */
+.message.toast {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 60;
+  max-width: min(560px, calc(100vw - 32px)); margin: 0; border-width: 2px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); font-weight: 600;
+}
 
 
 /* ---------- Login ---------- */

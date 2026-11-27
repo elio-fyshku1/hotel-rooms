@@ -1,9 +1,10 @@
 "use client";
 /**
- * Admin page layout: a result message at the top and one section per topic.
+ * Admin page layout: one section per topic, and the result of the last change
+ * shown at the bottom of the screen (so it's seen wherever the page is scrolled).
  * Owns the shared "run a change, show the result, reload" logic.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Package, Settings } from "@/lib/types";
 import SettingsSection from "./SettingsSection";
@@ -63,6 +64,13 @@ export default function AdminPanel(props: AdminPanelProps) {
   const router = useRouter();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // A success message goes away by itself after a few seconds; an error stays until tapped
+  useEffect(() => {
+    if (!message?.ok) return;
+    const timer = setTimeout(() => setMessage(null), 5000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
   // Shared by all sections: run the API call, show the result, reload the data
   const runChange: RunChange = async (change, successMessage) => {
     try {
@@ -80,7 +88,7 @@ export default function AdminPanel(props: AdminPanelProps) {
     <div className="container admin">
       {/* Result of the last change (green = done, red = error); tap to hide */}
       {message && (
-        <div className={`card message ${message.ok ? "ok" : "fail"}`} onClick={() => setMessage(null)}>
+        <div className={`card message toast ${message.ok ? "ok" : "fail"}`} role="status" onClick={() => setMessage(null)}>
           {message.text}
         </div>
       )}
