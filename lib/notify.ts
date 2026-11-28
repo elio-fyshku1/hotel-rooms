@@ -57,8 +57,8 @@ export async function sendOwnerEmail(subject: string, text: string): Promise<voi
   });
 }
 
-/** "26.11.2026, 20:45" in the hotel's timezone. */
-function hotelTime(timezone: string): string {
+/** "26.11.2026, 20:45" in the hotel's timezone (now, or the given moment). */
+function hotelTime(timezone: string, at: string | Date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
     day: "2-digit",
@@ -67,7 +67,7 @@ function hotelTime(timezone: string): string {
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
-  }).formatToParts(new Date());
+  }).formatToParts(new Date(at));
   const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
   return `${part("day")}.${part("month")}.${part("year")}, ${part("hour")}:${part("minute")}`;
 }
@@ -94,7 +94,7 @@ export interface LoginAlert {
   ip: string;
   userAgent: string;
   fromHotel: boolean;
-  shift?: ShiftSummary | null;           // on logout: the shift that just ended
+  shift?: ShiftSummary | null;           // logout: the shift that ended; login: the shift that continues
 }
 
 // Subject and first line of each alert
@@ -120,7 +120,13 @@ export function alertLogin(alert: LoginAlert): void {
     const body = [
       `${alert.name} ${text.line}`,
       ...(alert.shift
-        ? ["", `Arka e turnit: ${formatMoney(alert.shift.cash, mail.currency)} (${alert.shift.payments} pagesa)`]
+        ? [
+            "",
+            ...(alert.kind === "login"
+              ? [`Vazhdon turnin e nisur në ${hotelTime(mail.timezone, alert.shift.started_at)}.`]
+              : []),
+            `Arka e turnit: ${formatMoney(alert.shift.cash, mail.currency)} (${alert.shift.payments} pagesa)`,
+          ]
         : []),
       "",
       `Ora:        ${time}`,

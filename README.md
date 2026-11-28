@@ -144,8 +144,12 @@ everything and creates the tables.
 
 - A worker's **shift** starts at login and ends at logout ("Dil"). If they forget, it ends when the
   next worker logs in.
-- At the top of the room board the worker sees **Arka e turnit**: the money they took since their login
-  (starts at 0). The rooms themselves don't change between shifts.
+- Shift times: **08:00–16:00**, **16:00–23:00**, **23:00–08:00** (`SHIFT_START_HOURS` in `lib/shifts.ts`).
+  A worker who logs out and back in within the same shift time continues the same shift with the same
+  cash, with 1 hour of tolerance after the shift time ends (`SHIFT_GRACE_MINUTES`): a worker of the
+  08:00–16:00 shift who logs back in before 17:00 continues. Later, their next login starts a new shift at 0.
+- At the top of the room board the worker sees **Arka e turnit**: the money they took in this shift
+  (starts at 0 for a new shift). The rooms themselves don't change between shifts.
 - The logout email to the owner includes the shift's cash. **Historiku → Turnet** lists the shifts of the
   last 72 hours with each one's cash, to compare with the money handed over.
 - The cash is worked out from the payments each worker recorded, so it always matches the stays.

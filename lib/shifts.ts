@@ -33,21 +33,67 @@ const SHIFT_SUMMARY = `
     left join stays st on st.id = e.stay_id`;
 
 /**
+ * The hotel's shift times: hour (hotel time) at which each shift starts.
+ * 08:00-16:00 shift 1, 16:00-23:00 shift 2, 23:00-08:00 shift 3.
+ */
+export const SHIFT_START_HOURS = [8, 16, 23];
+
+/** Minutes after a shift time ends during which its worker still continues it. */
+export const SHIFT_GRACE_MINUTES = 60;
+
+/**
  * Starts the shift of a worker who just logged in. Open shifts of other
  * workers end here (they forgot to log out). If this worker already has an
- * open shift (second device, or logging in again), it simply continues.
+ * open shift (second device), it simply continues.
+ *
+ * Logging out and back in within the same shift time (e.g. both between
+ * 08:00 and 16:00) doesn't start over: the worker's last shift opens again
+ * with its cash. This still holds up to SHIFT_GRACE_MINUTES after the shift
+ * time ends (until 17:00 for the 08:00-16:00 shift). Later, a new shift
+ * starts at 0.
+ *
+ * Returns the shift when an earlier one was continued, for the owner's email.
  */
-export async function openShift(userId: number): Promise<void> {
+export async function openShift(userId: number): Promise<ShiftSummary | null> {
   await query(
     `update shifts set ended_at = now(), ended_by = 'next_login'
       where ended_at is null and user_id <> $1`,
     [userId]
   );
-  await query(
-    `insert into shifts (user_id)
-     select $1 where not exists (select 1 from shifts where user_id = $1 and ended_at is null)`,
-    [userId]
+  const open = await query(`select 1 from shifts where user_id = $1 and ended_at is null`, [userId]);
+  if (open.length > 0) return null;
+
+  // Start of the shift time we were in SHIFT_GRACE_MINUTES ago, as a local
+  // hotel time: the latest of yesterday's and today's start hours that had
+  // passed by then. The last shift continues if it ended after that.
+  const reopened = await query<{ id: number }>(
+    `with st as (select timezone as tz from settings where id = 1),
+     window_start as (
+       select max(b) as at
+         from st,
+              unnest($2::int[]) as h,
+              unnest(array[-1, 0]) as d,
+              lateral (select (now() at time zone st.tz)::date + d + make_interval(hours => h) as b) x
+        where b <= (now() - make_interval(mins => $3)) at time zone st.tz
+     ),
+     last as (
+       select id, ended_at from shifts
+        where user_id = $1 order by started_at desc limit 1
+     )
+     update shifts sh set ended_at = null, ended_by = ''
+       from last, st, window_start w
+      where sh.id = last.id
+        and last.ended_at at time zone st.tz >= w.at
+     returning sh.id`,
+    [userId, SHIFT_START_HOURS, SHIFT_GRACE_MINUTES]
   );
+  if (reopened.length > 0) {
+    const rows = await query<ShiftSummary>(`${SHIFT_SUMMARY} where sh.id = $1 group by sh.id, u.id`, [reopened[0].id]);
+    return rows[0];
+  }
+
+  await query(`insert into shifts (user_id) values ($1)`, [userId]);
+  return null;
 }
 
 /** Ends the worker's open shift (logout) and returns its summary, if there was one. */

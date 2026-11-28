@@ -7,7 +7,8 @@
  *   - are refused outside the hotel's network when that rule is on
  *     (the owner gets an email with the address they tried from),
  *   - trigger an email to the owner on every successful login (if enabled),
- *   - start a shift (lib/shifts.ts): the shift cash on the board starts at 0.
+ *   - start a shift (lib/shifts.ts): the shift cash on the board starts at 0,
+ *     unless they log back in within the same shift time and it continues.
  */
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
@@ -68,8 +69,8 @@ export const POST = withErrorHandling(async (request: Request) => {
   await createSession(user.id);
   await logLogin({ ...entry, result: "ok" });
   if (user.role === "worker") {
-    await openShift(user.id);
-    alertLogin({ name, kind: "login", ip, userAgent, fromHotel });
+    const continued = await openShift(user.id);
+    alertLogin({ name, kind: "login", ip, userAgent, fromHotel, shift: continued });
   }
   return NextResponse.json({ ok: true });
 });
