@@ -146,8 +146,8 @@ everything and creates the tables.
   next worker logs in.
 - Shift times: **08:00–16:00**, **16:00–23:00**, **23:00–08:00** (`SHIFT_START_HOURS` in `lib/shifts.ts`).
   A worker who logs out and back in within the same shift time continues the same shift with the same
-  cash, with 1 hour of tolerance after the shift time ends (`SHIFT_GRACE_MINUTES`): a worker of the
-  08:00–16:00 shift who logs back in before 17:00 continues. Later, their next login starts a new shift at 0.
+  cash, with 10 minutes of tolerance after the shift time ends (`SHIFT_GRACE_MINUTES`): a worker of the
+  08:00–16:00 shift who logs back in before 16:10 continues. Later, their next login starts a new shift at 0.
 - At the top of the room board the worker sees **Arka e turnit**: the money they took in this shift
   (starts at 0 for a new shift). The rooms themselves don't change between shifts.
 - The logout email to the owner includes the shift's cash. **Historiku → Turnet** lists the shifts of the

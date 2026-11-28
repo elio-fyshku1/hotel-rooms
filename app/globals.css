@@ -199,7 +199,7 @@ th { color: var(--muted); font-weight: 600; }
 /* Colours per status (see components/dashboard/roomStatus.ts) */
 .room.free { background: var(--green); }
 .room.occupied { background: var(--red); }
-.room.ending { background: var(--red); border-color: var(--amber); }
+.room.ending, .room.grace { background: var(--red); border-color: var(--amber); }
 .room.cleaning { background: var(--amber); color: #1a1205; }
 .room.overdue {
   background: var(--red);

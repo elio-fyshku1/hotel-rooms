@@ -386,14 +386,14 @@ export default function RoomBoard({ isAdmin }: { isAdmin: boolean }) {
   // Count rooms per status for the summary at the top
   const counts = { free: 0, occupied: 0, overdue: 0, cleaning: 0 };
   for (const room of data.rooms) {
-    const status = getRoomStatus(room, now);
+    const status = getRoomStatus(room, now, data.settings.grace_minutes);
     if (status === "free") counts.free++;
     else if (status === "cleaning") counts.cleaning++;
     else if (status === "overdue") counts.overdue++;
     else counts.occupied++;
   }
 
-  const overdueRooms = data.rooms.filter((room) => getRoomStatus(room, now) === "overdue");
+  const overdueRooms = data.rooms.filter((room) => getRoomStatus(room, now, data.settings.grace_minutes) === "overdue");
 
   // Group rooms by floor (rooms without a floor go in one group)
   const floors = new Map<string, RoomView[]>();
@@ -469,7 +469,7 @@ export default function RoomBoard({ isAdmin }: { isAdmin: boolean }) {
               <RoomTile
                 key={room.id}
                 room={room}
-                status={getRoomStatus(room, now)}
+                status={getRoomStatus(room, now, data.settings.grace_minutes)}
                 now={now}
                 settings={settings}
                 onOpen={() => setOpenRoomId(room.id)}
@@ -489,7 +489,7 @@ export default function RoomBoard({ isAdmin }: { isAdmin: boolean }) {
       {openRoom && (
         <RoomDialog
           room={openRoom}
-          status={getRoomStatus(openRoom, now)}
+          status={getRoomStatus(openRoom, now, data.settings.grace_minutes)}
           now={now}
           settings={settings}
           busy={busy}

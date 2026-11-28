@@ -3,6 +3,8 @@
  * One room on the board. Colour comes from its status (getRoomStatus below and
  * the .room.* classes in globals.css). Occupied rooms show the check-in time,
  * the deadline and a live countdown; once the time is up it counts upwards.
+ * After the time is up there is a tolerance (settings.grace_minutes) with no
+ * extra charge; only after it the tile pulses and shakes.
  * Rooms waiting for cleaning show when the guest left and how long ago.
  * A "Pa paguar" label shows when the guest (current or last) still owes money.
  */
@@ -14,18 +16,20 @@ export type RoomStatus =
   | "cleaning"  // yellow: guest left, not cleaned yet
   | "occupied"  // red: guest inside, time remaining
   | "ending"    // red with orange border: less than 10 minutes left
-  | "overdue";  // red, pulsing: time is up
+  | "grace"     // red with orange border: time is up, still within the tolerance
+  | "overdue";  // red, pulsing: time and tolerance are up
 
 const ENDING_SOON_MS = 10 * 60 * 1000;
 
 /** Status of a room at the given moment (milliseconds, server-corrected). */
-export function getRoomStatus(room: RoomView, now: number): RoomStatus {
+export function getRoomStatus(room: RoomView, now: number, graceMinutes: number): RoomStatus {
   if (!room.stay) {
     return room.needs_cleaning ? "cleaning" : "free";
   }
 
   const remaining = new Date(room.stay.expected_out).getTime() - now;
-  if (remaining <= 0) return "overdue";
+  if (remaining <= -graceMinutes * 60 * 1000) return "overdue";
+  if (remaining <= 0) return "grace";
   if (remaining <= ENDING_SOON_MS) return "ending";
   return "occupied";
 }
@@ -37,6 +41,7 @@ const STATUS_TEXT: Record<RoomStatus, string> = {
   cleaning: "Për pastrim",
   occupied: "E zënë",
   ending: "E zënë",
+  grace: "Koha mbaroi",
   overdue: "Koha mbaroi",
 };
 

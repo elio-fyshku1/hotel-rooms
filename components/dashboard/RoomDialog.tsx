@@ -183,8 +183,14 @@ function OccupiedRoomContent({ room, status, now, settings, isAdmin, busy, onSta
           </div>
         </div>
       ) : (
-        // Time not up yet
+        // Time not up yet, or up but still within the tolerance (no extra charge)
         <div className="stack">
+          {status === "grace" && (
+            <div className="alert warn">
+              Koha mbaroi {minutesOver > 0 ? `para ${minutesOver} min` : "tani"}. Pa pagesë shtesë edhe{" "}
+              {Math.max(1, settings.grace_minutes - minutesOver)} min.
+            </div>
+          )}
           <button className="btn green big" disabled={busy} onClick={() => onStayAction({ action: "checkout", extra: 0 })}>
             Regjistro daljen tani
           </button>

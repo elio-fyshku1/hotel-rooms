@@ -39,7 +39,7 @@ const SHIFT_SUMMARY = `
 export const SHIFT_START_HOURS = [8, 16, 23];
 
 /** Minutes after a shift time ends during which its worker still continues it. */
-export const SHIFT_GRACE_MINUTES = 60;
+export const SHIFT_GRACE_MINUTES = 10;
 
 /**
  * Starts the shift of a worker who just logged in. Open shifts of other
@@ -49,7 +49,7 @@ export const SHIFT_GRACE_MINUTES = 60;
  * Logging out and back in within the same shift time (e.g. both between
  * 08:00 and 16:00) doesn't start over: the worker's last shift opens again
  * with its cash. This still holds up to SHIFT_GRACE_MINUTES after the shift
- * time ends (until 17:00 for the 08:00-16:00 shift). Later, a new shift
+ * time ends (until 16:10 for the 08:00-16:00 shift). Later, a new shift
  * starts at 0.
  *
  * Returns the shift when an earlier one was continued, for the owner's email.

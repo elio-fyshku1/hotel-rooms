@@ -67,7 +67,7 @@ create table if not exists settings (
   night_end        time not null default '06:00',   -- ...until this time in the morning
   night_checkout   time not null default '12:00',   -- night guests must leave by this time
   extra_hour_price numeric(10,2) not null default 500, -- overtime charge per started hour
-  grace_minutes    int not null default 10,         -- overtime tolerated before suggesting a charge
+  grace_minutes    int not null default 20,         -- overtime tolerated before suggesting a charge
   require_cleaning boolean not null default true    -- room waits for "cleaned" after checkout
 );
 
