@@ -165,6 +165,13 @@ create unique index if not exists stays_one_open_per_room on stays(room_id) wher
 -- History and reports filter by check-in date.
 create index if not exists stays_check_in_idx on stays(check_in);
 
+-- When the room went into cleaning (the guest's check-out), for the timer on
+-- the board. Rooms already waiting get their last guest's check-out time.
+alter table rooms add column if not exists cleaning_since timestamptz;
+update rooms r set cleaning_since = coalesce(
+         (select max(s.check_out) from stays s where s.room_id = r.id and s.status = 'closed'), now())
+ where r.needs_cleaning and r.cleaning_since is null;
+
 
 -- -----------------------------------------------------------------------------
 -- stay_events

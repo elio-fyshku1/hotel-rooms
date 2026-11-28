@@ -3,6 +3,7 @@
  * One room on the board. Colour comes from its status (getRoomStatus below and
  * the .room.* classes in globals.css). Occupied rooms show the check-in time,
  * the deadline and a live countdown; once the time is up it counts upwards.
+ * Rooms waiting for cleaning show when the guest left and how long ago.
  * A "Pa paguar" label shows when the guest (current or last) still owes money.
  */
 import type { RoomView, Settings } from "@/lib/types";
@@ -70,6 +71,13 @@ export default function RoomTile({ room, status, now, settings, onOpen }: RoomTi
           <span className="room-timer">
             {remaining > 0 ? formatCountdown(remaining) : `+${formatCountdown(-remaining)}`}
           </span>
+        </>
+      )}
+
+      {status === "cleaning" && room.cleaning_since && (
+        <>
+          <span className="room-times">Doli {formatTime(room.cleaning_since, settings.timezone)}</span>
+          <span className="room-timer">{formatCountdown(Math.max(0, now - new Date(room.cleaning_since).getTime()))}</span>
         </>
       )}
 

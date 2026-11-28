@@ -141,7 +141,7 @@ async function insertStay(
   if (!stay) throw new UserError("Kjo paketë nuk ekziston më. Rifreskoni faqen.");
 
   // A new guest means the room is in use, whatever its cleaning flag was.
-  await client.query("update rooms set needs_cleaning = false where id = $1", [roomId]);
+  await client.query("update rooms set needs_cleaning = false, cleaning_since = null where id = $1", [roomId]);
   await logEvent(client, stay.id, "check_in", userId, stay.base_price, stay.package_name);
   return stay;
 }
@@ -164,7 +164,9 @@ async function closeStay(client: PoolClient, stay: Stay, userId: number, extra: 
   if (!result.rows[0]) throw new UserError("Ky qëndrim është mbyllur tashmë.");
 
   await client.query(
-    "update rooms set needs_cleaning = (select require_cleaning from settings where id = 1) where id = $1",
+    `update rooms set needs_cleaning = st.require_cleaning,
+                      cleaning_since = case when st.require_cleaning then now() end
+       from settings st where st.id = 1 and rooms.id = $1`,
     [stay.room_id]
   );
   await logEvent(client, stay.id, "check_out", userId, extra, extra > 0 ? "overtime" : "");
@@ -392,7 +394,7 @@ export async function applyStayAction(
  */
 export async function listRooms(): Promise<RoomView[]> {
   return query<RoomView>(
-    `select r.id, r.number, r.floor, r.needs_cleaning,
+    `select r.id, r.number, r.floor, r.needs_cleaning, r.cleaning_since,
             case when s.id is null then null else json_build_object(
               'id', s.id,
               'stay_type', s.stay_type,

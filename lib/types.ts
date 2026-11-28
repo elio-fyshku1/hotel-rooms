@@ -68,6 +68,7 @@ export interface RoomView {
   number: string;
   floor: number | null;
   needs_cleaning: boolean;
+  cleaning_since: Timestamp | null; // when the guest left, while needs_cleaning
   stay: null | {
     id: number;
     stay_type: StayType;

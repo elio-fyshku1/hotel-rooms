@@ -14,7 +14,7 @@ export const POST = withErrorHandling(
     if (user instanceof NextResponse) return user;
 
     const { id } = await context.params;
-    await query("update rooms set needs_cleaning = false where id = $1", [Number(id)]);
+    await query("update rooms set needs_cleaning = false, cleaning_since = null where id = $1", [Number(id)]);
     return NextResponse.json({ ok: true });
   }
 );
